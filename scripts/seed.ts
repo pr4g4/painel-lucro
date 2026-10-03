@@ -52,6 +52,8 @@ async function main() {
   if (!zapExiste) await db.insert(schema.lancamentosManuais).values({ tipo: "saida", moeda: "BRL", valor: "119", categoriaId: catZap.id, descricao: "ZapData mensalidade", frequencia: "mensal", comecaEm: new Date("2026-10-02T03:00:00Z"), ativo: true });
 
   if (exemplo) {
+    // dados de exemplo sempre partem do zero (apaga só o que vem das fontes; usuários e parâmetros ficam)
+    await db.execute(sql`truncate lancamentos, vendas, campanhas, cambio, coletas, avisos restart identity`);
     const { coletarCambio } = await import("../src/coletores/cambio");
     const { coletarMeta } = await import("../src/coletores/meta");
     const { coletarOpenAI } = await import("../src/coletores/openai");

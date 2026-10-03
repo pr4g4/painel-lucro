@@ -21,11 +21,21 @@ Observação deste ambiente: o container onde estou agora bloqueia saída para `
 
 ## 2. Arquitetura
 
-**Escolha: Next.js (App Router) + Postgres via Supabase**, hospedado na Vercel, com coletores em Vercel Cron chamando rotas protegidas.
+**Escolha: Next.js 15 (App Router) + Postgres no Supabase (plano Free) + Vercel (plano Hobby, grátis) + agendador pg_cron/pg_net do Supabase.** Custo: R$ 0.
 Justificativa em 3 linhas:
-1. Um só repositório e um só deploy cobrem front, API de leitura, login e coletores; o Erick só cola variáveis no painel da Vercel.
-2. Postgres dá as chaves únicas de idempotência e as consultas por janela de minuto que o seletor de período exige; Supabase evita administrar banco.
-3. Vercel Cron roda os coletores no servidor, com ou sem alguém logado, a cada 5 min (plano Pro) ou a cada 15 min (plano gratuito permite diário; se ficar no gratuito, usar GitHub Actions como agendador externo que chama a rota).
+1. Um só repositório e um só deploy cobrem front, API, login e coletores; o Erick só cola variáveis no painel da Vercel (sem servidor para administrar).
+2. Postgres dá as chaves únicas de idempotência e as consultas por minuto que o seletor exige; o Supabase Free já traz Postgres, pg_cron e pg_net.
+3. O agendador fica dentro do banco (pg_cron chama a rota da Vercel a cada 10 min via pg_net): roda com ou sem alguém logado e não depende de minutos de CI nem de plano pago.
+
+### Agendador: por que pg_cron + pg_net (e não as outras opções grátis)
+| Opção | Grátis? | Problema |
+|---|---|---|
+| Vercel Cron (Hobby) | sim | só permite **1 execução por dia** por job; 10 min exige plano Pro (US$ 20/mês). |
+| GitHub Actions (repo privado) | 2.000 min/mês | 6 execuções/h × 24 × 30 = 4.320 execuções; mesmo a ~0,5 min cada são ~2.160 min/mês, acima do limite, e o cron do GitHub atrasa/pula em horário de pico. |
+| Cloudflare Cron Triggers (Workers Free) | sim | precisa de mais uma conta e um Worker só para chamar a rota; funciona, mas é peça a mais para um leigo manter. |
+| **Supabase pg_cron + pg_net (Free)** | **sim** | nenhuma conta extra; o SQL está em `supabase/agendador.sql`. Risco: projeto Free **pausa após 7 dias sem atividade**; as chamadas de 10 min da própria coleta contam como atividade, então na prática não pausa. Se pausar, basta clicar "Restore" no painel do Supabase. |
+
+Limites do plano Hobby da Vercel que o código já respeita: função serverless até 60 s (`maxDuration = 60`, cada fonte roda em chamada própria se precisar), 100 GB de banda/mês (o app é leve).
 
 Componentes:
 - `app/` Next.js 15, TypeScript, Tailwind, shadcn/ui, Recharts.
@@ -37,7 +47,14 @@ Componentes:
 
 Tabelas mínimas (detalhadas no passo 2): `usuarios`, `parametros` (chave, valor, vigencia_inicio, vigencia_fim), `frentes` (nome, regra de nome de campanha, ativa), `campanhas`, `lancamentos` (fonte, chave_natural única, instante, valor_original, moeda, valor_brl, taxa_cambio, historico, payload bruto), `vendas` (fonte, id_origem único, aprovada_em, bruto_mxn, taxas, liquido, reserva, status, produto, reembolsada, reembolsada_em), `lancamentos_manuais` (tipo saída/entrada, moeda, valor, categoria, frequência, inicio, fim, status), `categorias`, `cambio` (dia, par, taxa, fonte), `avisos`, `coletas` (fonte, iniciada_em, terminada_em, ok, erro) para o carimbo "atualizado às".
 
-Variáveis de ambiente (nomes apenas): `DATABASE_URL`, `SESSION_SECRET`, `CRON_SECRET`, `META_TOKEN`, `META_ACT_00`, `META_ACT_01`, `OPENAI_ADMIN_KEY`, `OPENAI_PROJECT_ID`, `KIE_API_KEY`, `ZENITH_WEBHOOK_SECRET` (se houver), `APP_TZ=America/Sao_Paulo`.
+Variáveis de ambiente (nomes apenas): `DATABASE_URL`, `SESSION_SECRET`, `CRON_SECRET`, `META_TOKEN`, `META_ACT_00`, `META_ACT_01`, `OPENAI_ADMIN_KEY`, `OPENAI_PROJECT_ID`, `KIE_API_KEY`, `ZENITH_WEBHOOK_SECRET` (se houver), `APP_TZ=America/Sao_Paulo`, `SEED_SENHA_ERICK`, `SEED_SENHA_IAN` (só para o primeiro seed). Passo a passo de criação das contas e de onde colar cada uma: `docs/como-publicar.md`.
+
+## 2.1 O que já está construído (noite de 03/10)
+- Banco (13 tabelas, migração em `drizzle/`), parâmetros com vigência, login argon2id + sessão httpOnly + limite de tentativas, papéis edita/vê.
+- Motor de cálculo puro (`src/lib/calculo`) usado pelos cartões e pela DRE; 28 testes automáticos incluindo os números de sanidade de 02/10 e a idempotência dos coletores.
+- Coletores de Meta (hora → assíncrono → dia), OpenAI (uso por hora + custo diário), kie.ai (por diferença de saldo), câmbio PTAX, Zenith (webhook + CSV + normalizador), com clientes simulados para desenvolver sem chave.
+- Telas: login, painel, DRE (total, intervalos, expansível, CSV), campanhas, lançamentos manuais, venda manual, custos por tipo, lançamentos, por produto, avisos, parâmetros/frentes/usuários; tema claro/escuro; celular.
+- Comando "atualizar painel" em 1 linha: `GET /api/resumo` (também o botão "Atualizar agora").
 
 ## 3. Pendências (fora do passo atual)
 - Fase 1.5: alerta WhatsApp para +55 47 99149-8006 quando o lucro das últimas horas cair abaixo de um limite; meta mensal com barra de progresso.
