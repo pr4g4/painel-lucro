@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { exigirSessao } from "@/lib/auth/sessao";
 import { avisosAbertos } from "@/lib/dados";
+import { garantirConexao } from "@/db";
 import { BotaoTema } from "@/components/tema";
 import { sair } from "@/app/login/acoes";
 
@@ -11,6 +12,7 @@ const MENU = [
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const s = await exigirSessao();
+  await garantirConexao();
   const avisos = await avisosAbertos();
   return (
     <div className="min-h-screen flex flex-col">

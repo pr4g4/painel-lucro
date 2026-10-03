@@ -4,8 +4,10 @@ import { lerPeriodo, paraInputLocal, type Params, type EstadoPeriodo } from "@/l
 import { marcoZero, carregarParametros, calcularPeriodoComAnterior, ultimasColetas, carregarCambio } from "@/lib/dados";
 import { ROTULO_ATALHO } from "@/lib/calculo";
 import { getSessao } from "@/lib/auth/sessao";
+import { garantirConexao } from "@/db";
 
 export async function contextoPeriodo(sp: Params) {
+  await garantirConexao();
   const params = await carregarParametros();
   const mz = await marcoZero(params);
   const estado = lerPeriodo(sp, mz);

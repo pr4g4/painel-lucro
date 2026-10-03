@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
-import { db, schema } from "@/db";
+import { db, schema, garantirConexao } from "@/db";
 import { gerarHash } from "@/lib/auth/senha";
 import { PARAMETROS_PADRAO } from "@/lib/calculo";
 
@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const seg = req.nextUrl.searchParams.get("segredo") ?? req.headers.get("authorization")?.replace("Bearer ", "");
   if (!process.env.CRON_SECRET || seg !== process.env.CRON_SECRET) return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
+  await garantirConexao();
   const feito: string[] = [];
   const inicio = new Date("2026-09-01T03:00:00Z");
   for (const [usuario, nome, papel, env] of [["erick", "Erick", "edita", "SEED_SENHA_ERICK"], ["ian", "Ian", "ve", "SEED_SENHA_IAN"]] as const) {

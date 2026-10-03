@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { getSessao } from "@/lib/auth/sessao";
 import { FormLogin } from "./form";
 
+export const maxDuration = 30;
+export const dynamic = "force-dynamic";
+
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ volta?: string }> }) {
   const s = await getSessao();
   if (s.usuarioId) redirect("/");

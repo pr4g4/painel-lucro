@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { coletar, coletarTudo, FONTES, type Fonte } from "@/coletores";
+import { garantirConexao } from "@/db";
 import { getIronSession } from "iron-session";
 import { SESSAO_OPCOES, type Sessao } from "@/lib/auth/sessao";
 
@@ -19,6 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ fon
   }
   if (!segredoOk && !sessaoOk) return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
 
+  await garantirConexao();
   if (fonte === "todas") return NextResponse.json({ resultados: await coletarTudo() });
   if (!(FONTES as readonly string[]).includes(fonte)) return NextResponse.json({ erro: `fonte desconhecida: ${fonte}` }, { status: 404 });
   return NextResponse.json({ resultado: await coletar(fonte as Fonte) });
