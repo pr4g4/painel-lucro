@@ -11,10 +11,11 @@ export default async function PaginaDRE({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const ctx = await contextoPeriodo(sp);
   const { estado, atual, anterior, temBaseAnterior, taxaMxn } = ctx;
-  const fatias = await dreFatiada(estado.periodo, estado.gran, { tz: estado.tz, incluirHistorico: estado.incluirHistorico, incluirManuais: estado.incluirManuais });
+  const fatias = dreFatiada(ctx.entrada, estado.periodo, estado.gran, estado.tz);
   return (
     <>
       <SeletorPeriodo {...ctx.propsSeletor} />
+      {ctx.problemas.length > 0 && <div className="card p-2 text-xs text-warn border-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
       <h1 className="font-semibold">DRE do período <span className="text-xs text-ink-3 font-normal">lucro líquido {fmtMoeda(atual.totais.lucroLiquido, estado.moeda, taxaMxn)} · igual ao cartão do painel</span></h1>
       <TabelaDRE
         atual={{ chave: "atual", rotulo: "Total do período", linhas: atual.linhas, receitaLiquida: atual.totais.receitaLiquida }}

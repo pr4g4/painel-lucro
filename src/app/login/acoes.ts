@@ -18,11 +18,11 @@ export async function entrar(_prev: { erro?: string; usuario?: string } | undefi
   let u: typeof schema.usuarios.$inferSelect | undefined;
   let ok = false;
   try {
-    await comPrazo(garantirConexao(), 12_000, "conexão com o banco");
-    if (await comPrazo(bloqueado(chave), 8_000, "limite de tentativas")) return { erro: "Muitas tentativas. Aguarde 15 minutos.", usuario };
-    [u] = await comPrazo(db.select().from(schema.usuarios).where(eq(schema.usuarios.usuario, usuario)).limit(1), 8_000, "busca do usuário");
-    ok = u ? await comPrazo(conferirSenha(senha, u.senhaHash), 8_000, "conferência da senha") : false;
-    await comPrazo(registrarTentativa(chave, ok), 8_000, "registro da tentativa");
+    await comPrazo(garantirConexao(), 7_000, "conexão com o banco");
+    if (await comPrazo(bloqueado(chave), 5_000, "limite de tentativas")) return { erro: "Muitas tentativas. Aguarde 15 minutos.", usuario };
+    [u] = await comPrazo(db.select().from(schema.usuarios).where(eq(schema.usuarios.usuario, usuario)).limit(1), 5_000, "busca do usuário");
+    ok = u ? await comPrazo(conferirSenha(senha, u.senhaHash), 5_000, "conferência da senha") : false;
+    await comPrazo(registrarTentativa(chave, ok), 5_000, "registro da tentativa");
   } catch (e) {
     return { erro: `Falha no login: ${e instanceof Error ? e.message : String(e)}`, usuario };
   }

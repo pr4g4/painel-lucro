@@ -1,6 +1,5 @@
 import { contextoPeriodo } from "@/lib/contexto";
-import { calcularPeriodoComAnterior } from "@/lib/dados";
-import { resolverAtalho } from "@/lib/calculo";
+import { resolverAtalho, periodoAnterior } from "@/lib/calculo";
 import { dreFatiada } from "@/lib/fatias";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
 import { Cartao } from "@/components/cartao";
@@ -18,9 +17,10 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   const sp = await searchParams;
   const ctx = await contextoPeriodo(sp);
   const { estado, atual, anterior, temBaseAnterior, coletas, taxaMxn } = ctx;
-  const op = { tz: estado.tz, incluirHistorico: estado.incluirHistorico, incluirManuais: estado.incluirManuais };
   const hojeP = resolverAtalho("hoje", estado.agora, estado.marcoZero, estado.tz).periodo;
-  const [hoje, fatias] = await Promise.all([calcularPeriodoComAnterior(hojeP, op), dreFatiada(estado.periodo, estado.gran, op)]);
+  const hojeAnt = periodoAnterior(hojeP, estado.tz);
+  const hoje = { atual: ctx.calc(hojeP), anterior: ctx.calc(hojeAnt), temBaseAnterior: ctx.temDados(hojeAnt) };
+  const fatias = dreFatiada(ctx.entrada, estado.periodo, estado.gran, estado.tz);
 
   const dadosGrafico = fatias.map((f) => ({ rotulo: f.rotulo, receita: f.dre.totais.receitaLiquida, meta: f.dre.totais.metaComImposto, zapdata: f.dre.totais.zapdata, ia: f.dre.totais.ia, operacao: f.dre.totais.operacao, lucro: f.dre.totais.lucroLiquido }));
   const atrasadas = [...coletas.entries()].filter(([f, c]) => f !== "zenith" && (!c.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000));
@@ -28,6 +28,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   return (
     <>
       <SeletorPeriodo {...ctx.propsSeletor} />
+      {ctx.problemas.length > 0 && <div className="card p-2 text-xs text-warn border-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
       <VisoesSalvas />
       <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2">
         <span>Atualizado:</span>
