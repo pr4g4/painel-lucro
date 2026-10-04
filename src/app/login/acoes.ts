@@ -2,7 +2,7 @@
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { db, schema, garantirConexao } from "@/db";
+import { db, schema, executar } from "@/db";
 import { conferirSenha } from "@/lib/auth/senha";
 import { getSessao } from "@/lib/auth/sessao";
 import { bloqueado, registrarTentativa } from "@/lib/auth/limite";
@@ -18,12 +18,15 @@ export async function entrar(_prev: { erro?: string; usuario?: string } | undefi
   let u: typeof schema.usuarios.$inferSelect | undefined;
   let ok = false;
   try {
-    await comPrazo(garantirConexao(), 7_000, "conexão com o banco");
-    if (await comPrazo(bloqueado(chave), 5_000, "limite de tentativas")) return { erro: "Muitas tentativas. Aguarde 15 minutos.", usuario };
-    [u] = await comPrazo(db.select().from(schema.usuarios).where(eq(schema.usuarios.usuario, usuario)).limit(1), 5_000, "busca do usuário");
-    ok = u ? await comPrazo(conferirSenha(senha, u.senhaHash), 5_000, "conferência da senha") : false;
-    await comPrazo(registrarTentativa(chave, ok), 5_000, "registro da tentativa");
+    // um prazo único e folgado para o conjunto (a função tem 30 s); erro de conexão real é repetido uma vez pelo `executar`
+    await comPrazo((async () => {
+      if (await bloqueado(chave)) throw new BloqueadoErro();
+      [u] = await executar((d) => d.select().from(schema.usuarios).where(eq(schema.usuarios.usuario, usuario)).limit(1));
+      ok = u ? await conferirSenha(senha, u.senhaHash) : false;
+      await registrarTentativa(chave, ok);
+    })(), 20_000, "login");
   } catch (e) {
+    if (e instanceof BloqueadoErro) return { erro: "Muitas tentativas. Aguarde 15 minutos.", usuario };
     return { erro: `Falha no login: ${e instanceof Error ? e.message : String(e)}`, usuario };
   }
   if (!u || !ok) return { erro: u ? "Usuário ou senha inválidos." : "Usuário não existe. Rode /api/seed?segredo=... para criar os usuários.", usuario };
@@ -39,7 +42,9 @@ export async function sair() {
   redirect("/login");
 }
 
-/** Nunca deixar o botão "Entrando…" preso: cada etapa tem prazo e vira mensagem na tela. */
+class BloqueadoErro extends Error {}
+
+/** Nunca deixar o botão "Entrando…" preso: o conjunto tem prazo e vira mensagem na tela. */
 function comPrazo<T>(p: Promise<T>, ms: number, etapa: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([

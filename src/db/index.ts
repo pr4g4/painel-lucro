@@ -1,18 +1,22 @@
 import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { sql as dsql } from "drizzle-orm";
 import * as schema from "./schema";
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error("DATABASE_URL não definida");
 
 /**
- * Cliente Postgres para serverless (Vercel Fluid) + pooler do Supabase (porta 6543, modo transação).
+ * Cliente Postgres para Vercel + pooler do Supabase (porta 6543, modo transação).
  * - prepare: false → exigido pelo pooler em modo transação
- * - max: 1, idle_timeout 3 s, max_lifetime 60 s, connect_timeout 10 s → conexão curta, nunca fica "velha" entre invocações
- * - Conexão destruída/expirada no meio de uma consulta → `executar()` recria o cliente e repete UMA vez.
+ * - max: 3 → poucas conexões por instância; o pooler faz o resto
+ * - connect_timeout 15 s, idle_timeout 20 s, max_lifetime padrão (30–60 min, aleatório) → nada agressivo
+ * - NUNCA derrubamos a conexão por cima de consultas em andamento (foi isso que causava CONNECTION_DESTROYED em cascata).
+ *   Se uma consulta falhar com erro REAL de conexão (socket morto depois de a função ficar congelada), descartamos o cliente,
+ *   deixamos o antigo fechar sozinho e repetimos a consulta uma vez num cliente novo.
  */
 function criarSql() {
-  return postgres(url!, { max: 1, prepare: false, idle_timeout: 3, max_lifetime: 60, connect_timeout: 10, onnotice: () => {} });
+  return postgres(url!, { max: 3, prepare: false, idle_timeout: 20, connect_timeout: 15, onnotice: () => {} });
 }
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -24,47 +28,37 @@ function atual(): Estado {
   return g.__painelDb;
 }
 
+/** Descarta o cliente atual sem matar consultas em andamento: o antigo fecha quando ficar ocioso. */
 export function reciclarConexao() {
   const velho = g.__painelDb;
   g.__painelDb = undefined;
-  if (velho) velho.sql.end({ timeout: 1 }).catch(() => {});
+  if (velho) velho.sql.end().catch(() => {}); // sem timeout: espera as consultas pendentes terminarem
   return atual();
 }
 
-const CODIGOS_CONEXAO = ["CONNECTION_DESTROYED", "CONNECTION_CLOSED", "CONNECTION_ENDED", "CONNECT_TIMEOUT", "ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT"];
+// Erros do cliente (socket) e do servidor (57P01 admin_shutdown, 57P02 crash_shutdown, 57P03 cannot_connect_now, 08xxx connection exception)
+const CODIGOS_CONEXAO = ["CONNECTION_DESTROYED", "CONNECTION_CLOSED", "CONNECTION_ENDED", "CONNECT_TIMEOUT", "ECONNRESET", "ECONNREFUSED", "EPIPE", "ETIMEDOUT", "57P01", "57P02", "57P03", "08000", "08003", "08006", "08001", "08004"];
 export function erroDeConexao(e: unknown): boolean {
-  const code = (e as { code?: string })?.code ?? "";
-  const msg = e instanceof Error ? e.message : String(e);
-  return CODIGOS_CONEXAO.some((c) => code === c || msg.includes(c)) || msg.includes("tempo esgotado");
+  const codes = [(e as { code?: string })?.code, (e as { cause?: { code?: string } })?.cause?.code].filter(Boolean) as string[];
+  const msg = e instanceof Error ? `${e.message} ${(e as { cause?: Error }).cause?.message ?? ""}` : String(e);
+  return CODIGOS_CONEXAO.some((c) => codes.includes(c) || msg.includes(c)) || /terminating connection|server closed the connection/i.test(msg);
 }
 
-/** Roda uma consulta com prazo; se a conexão estava morta, recria o cliente e repete uma vez. */
-export async function executar<T>(fn: (db: Db) => Promise<T>, prazoMs = 8000, rotulo = "consulta"): Promise<T> {
-  for (let tentativa = 1; tentativa <= 2; tentativa++) {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        fn(atual().db),
-        new Promise<T>((_, rej) => { timer = setTimeout(() => rej(new Error(`${rotulo}: tempo esgotado (${prazoMs / 1000}s)`)), prazoMs); }),
-      ]);
-    } catch (e) {
-      if (tentativa === 2 || !erroDeConexao(e)) throw e;
-      reciclarConexao();
-    } finally {
-      if (timer) clearTimeout(timer);
-    }
+/** Roda uma consulta; se falhar por conexão morta, troca o cliente e repete uma vez. Sem prazo artificial. */
+export async function executar<T>(fn: (db: Db) => Promise<T>, _prazoMs?: number, _rotulo?: string): Promise<T> {
+  try {
+    return await fn(atual().db);
+  } catch (e) {
+    if (!erroDeConexao(e)) throw e;
+    reciclarConexao();
+    return await fn(atual().db);
   }
-  throw new Error("inalcançável");
 }
 
-/** Garante que a conexão responde (prazo curto). Se travar, recria o cliente e tenta mais uma vez. */
-export async function garantirConexao(prazoMs = 3000): Promise<void> {
-  await executar(async (d) => { await d.execute(sqlSelect1); }, prazoMs, "teste de conexão").catch((e) => {
-    throw new Error(`Banco não respondeu (${e instanceof Error ? e.message : e}). Confira DATABASE_URL e se o projeto do Supabase está ativo.`);
-  });
+/** Mantido para compatibilidade: uma consulta simples com a mesma regra de repetição (sem prazo curto, sem cascata). */
+export async function garantirConexao(): Promise<void> {
+  await executar(async (d) => { await d.execute(dsql`select 1`); });
 }
-import { sql as dsql } from "drizzle-orm";
-const sqlSelect1 = dsql`select 1`;
 
 /** `db` é um proxy para a instância atual: quem importou continua funcionando depois de uma reciclagem. */
 export const db: Db = new Proxy({} as Db, {
