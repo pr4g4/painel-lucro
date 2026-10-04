@@ -6,7 +6,7 @@ import { BotaoTema } from "./tema";
 
 export const MENU: [string, string][] = [
   ["/", "Painel"], ["/resumo", "Resumo"], ["/dre", "DRE"], ["/campanhas", "Campanhas"], ["/manuais", "Lançamentos manuais"], ["/venda-manual", "Venda manual"],
-  ["/custos", "Custos por tipo"], ["/lancamentos", "Lançamentos"], ["/produtos", "Por produto"], ["/avisos", "Avisos"], ["/parametros", "Parâmetros"],
+  ["/custos", "Custos por tipo"], ["/lancamentos", "Lançamentos"], ["/produtos", "Por produto"], ["/importar", "Importar CSV"], ["/avisos", "Avisos"], ["/parametros", "Parâmetros"],
 ];
 
 export function Menu({ nome, papel, avisos, sair }: { nome: string; papel: string; avisos: number; sair: () => Promise<void> }) {

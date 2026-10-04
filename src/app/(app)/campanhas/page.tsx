@@ -1,7 +1,7 @@
 import { contextoPeriodo } from "@/lib/contexto";
 import { carregarLancamentos, carregarParametros } from "@/lib/dados";
 import { fatorImpostoMeta, numeroVigente } from "@/lib/calculo";
-import { db, schema } from "@/db";
+import { schema, executar } from "@/db";
 import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
 import { fmtMoeda } from "@/lib/formato";
@@ -15,7 +15,7 @@ export default async function Campanhas({ searchParams }: { searchParams: Promis
   const ctx = await contextoPeriodo(sp);
   const { estado, taxaMxn } = ctx;
   const [lanc, params, camps] = await Promise.all([carregarLancamentos(estado.periodo), carregarParametros(),
-    db.select({ c: schema.campanhas, frente: schema.frentes.nome }).from(schema.campanhas).leftJoin(schema.frentes, eq(schema.frentes.id, schema.campanhas.frenteId))]);
+    executar((d) => d.select({ c: schema.campanhas, frente: schema.frentes.nome }).from(schema.campanhas).leftJoin(schema.frentes, eq(schema.frentes.id, schema.campanhas.frenteId)), 15000, "campanhas")]);
   const gasto = new Map<string, number>();
   for (const l of lanc) {
     if (l.fonte !== "meta" || (!estado.incluirHistorico && l.historico)) continue;

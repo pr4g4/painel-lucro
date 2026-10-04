@@ -24,14 +24,18 @@ export async function contextoPeriodo(sp: Params) {
   const calc = (p: Periodo) => calcularDRE({ ...entrada, periodo: p, opcoes: { ...entrada.opcoes, ...op } });
   const atual = calc(estado.periodo);
   const anterior = calc(estado.anterior);
-  const temBaseAnterior = temDados(entrada, estado.anterior);
+  const temBaseAnterior = temDados(entrada, estado.anterior, op.incluirHistorico);
   const taxaMxn = entrada.opcoes.cambio("MXNBRL", estado.agora);
-  return { estado, atual, anterior, temBaseAnterior, coletas, taxaMxn, params: entrada.parametros, sessao, entrada, calc, temDados: (p: Periodo) => temDados(entrada, p), problemas, propsSeletor: propsSeletor(estado, sessao.papel === "edita") };
+  return { estado, atual, anterior, temBaseAnterior, coletas, taxaMxn, params: entrada.parametros, sessao, entrada, calc, temDados: (p: Periodo) => temDados(entrada, p, op.incluirHistorico), problemas, propsSeletor: propsSeletor(estado, sessao.papel === "edita") };
 }
 
-function temDados(e: Entrada, p: Periodo): boolean {
+/** Há base de comparação? Só com dado que ENTRA no cálculo: sem "incluir histórico", nada antes do marco zero conta. */
+function temDados(e: Entrada, p: Periodo, incluirHistorico: boolean): boolean {
+  if (!incluirHistorico && p.fim.getTime() <= e.opcoes.marcoZero.getTime()) return false;
   const dentro = (d: Date | null) => !!d && d >= p.inicio && d < p.fim;
-  return e.vendas.some((v) => dentro(v.aprovadaEm)) || e.lancamentos.some((l) => dentro(l.instante)) || e.manuais.some((m) => m.ativo && m.comecaEm < p.fim);
+  const conta = (h: boolean) => incluirHistorico || !h;
+  return e.vendas.some((v) => conta(v.historico) && dentro(v.aprovadaEm)) || e.lancamentos.some((l) => conta(l.historico) && dentro(l.instante))
+    || e.manuais.some((m) => m.ativo && m.comecaEm < p.fim && (incluirHistorico || m.comecaEm.getTime() >= e.opcoes.marcoZero.getTime() || m.frequencia !== "unica"));
 }
 
 export function rotuloPeriodo(e: EstadoPeriodo): string {

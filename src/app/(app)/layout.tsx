@@ -3,6 +3,9 @@ import { avisosAbertos } from "@/lib/dados";
 import { sair } from "@/app/login/acoes";
 import { Menu } from "@/components/menu";
 
+export const maxDuration = 60; // nunca deixar uma página pendurada por 300 s
+export const dynamic = "force-dynamic";
+
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const s = await exigirSessao();
   const avisos = await avisosAbertos().catch(() => []);

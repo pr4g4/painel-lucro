@@ -27,7 +27,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   const mes = ctx.calc(mesP);
 
   const dadosGrafico = fatias.map((f) => ({ rotulo: f.rotulo, receita: f.dre.totais.receitaLiquida, meta: f.dre.totais.metaComImposto, zapdata: f.dre.totais.zapdata, ia: f.dre.totais.ia, operacao: f.dre.totais.operacao, lucro: f.dre.totais.lucroLiquido }));
-  const atrasadas = [...coletas.entries()].filter(([f, c]) => f !== "zenith" && (!c.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000));
+  const atrasadas = [...coletas.entries()].filter(([f, c]) => f !== "zenith" && !c.naoConfigurada && (!c.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000));
 
   return (
     <>
@@ -39,8 +39,10 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
         {["meta", "zenith", "cambio", "openai", "kie"].map((f) => {
           const c = coletas.get(f);
           const atras = !c?.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000;
-          return <span key={f} className={`px-2 py-0.5 rounded-full border border-border ${atras && f !== "zenith" ? "text-warn" : ""}`} title={c?.erro ?? ""}>{ROTULO_FONTE[f]} {c?.ultimaOk ? fmtHora(c.ultimaOk, estado.tz) : "nunca"}{f === "zenith" && !c?.ultimaOk ? " (webhook/CSV)" : ""}</span>;
+          const texto = c?.naoConfigurada ? `sem chave (tentou ${fmtHora(c.ultima, estado.tz)})` : c?.ultimaOk ? fmtHora(c.ultimaOk, estado.tz) : c ? `falhou ${fmtHora(c.ultima, estado.tz)}` : "nunca";
+          return <span key={f} className={`px-2 py-0.5 rounded-full border border-border ${atras && f !== "zenith" && !c?.naoConfigurada ? "text-warn" : c?.naoConfigurada ? "text-ink-3" : ""}`} title={c?.erro ?? ""}>{ROTULO_FONTE[f]} {texto}{f === "zenith" && !c?.ultimaOk ? " (webhook/CSV)" : ""}</span>;
         })}
+        {(() => { const c = coletas.get("cambio"); const ha = c ? Math.round((estado.agora.getTime() - c.ultima.getTime()) / 60_000) : null; return <span className={`px-2 py-0.5 rounded-full border border-border ${ha == null || ha > 15 ? "text-warn" : "text-pos"}`} title="O agendador (pg_cron) chama a coleta a cada 10 min; o câmbio roda sempre, então ele é o batimento.">agendador: {ha == null ? "nunca rodou" : `há ${ha} min`}</span>; })()}
         <BotaoAtualizar />
         {atrasadas.length > 0 && <span className="text-warn">⚠ {atrasadas.length} fonte(s) desatualizada(s) há mais de 30 min; mantendo o último valor bom.</span>}
       </div>

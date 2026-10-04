@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { db, schema } from "@/db";
+import { schema, executar } from "@/db";
 import { contextoPeriodo } from "@/lib/contexto";
 import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
@@ -14,7 +14,7 @@ export default async function VendaManual({ searchParams }: { searchParams: Prom
   const ctx = await contextoPeriodo(sp);
   const { estado, taxaMxn, sessao } = ctx;
   const edita = sessao.papel === "edita";
-  const vendas = await db.select().from(schema.vendas).where(eq(schema.vendas.fonte, "manual")).orderBy(desc(schema.vendas.aprovadaEm)).limit(200);
+  const vendas = await executar((d) => d.select().from(schema.vendas).where(eq(schema.vendas.fonte, "manual")).orderBy(desc(schema.vendas.aprovadaEm)).limit(200), 15000, "vendas manuais");
   return (
     <>
       <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>

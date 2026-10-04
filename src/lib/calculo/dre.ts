@@ -160,7 +160,7 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
       reservaRetida, pendentesQtd: pendentes.length, pendentesValor, numVendas, numReembolsos: reembolsadasNoPeriodo.length,
     },
     indicadores: {
-      roas: div(receitaLiquida, metaComImposto),
+      roas: receitaLiquida > 0 ? div(receitaLiquida, metaComImposto) : null,
       poas: div(lucroBruto, metaComImposto),
       margemLiquida: div(lucroLiquido, receitaLiquida),
       custoPorVenda: div(metaComImposto, numVendas),

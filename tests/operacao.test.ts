@@ -70,3 +70,14 @@ describe("gasto Meta por hora do dia e por número", () => {
     expect(extrairNumeroWhatsapp("sem")).toBeNull();
   });
 });
+
+describe("correções 04/10: ROAS sem receita, projeção sem receita", () => {
+  it("ROAS é null (—) quando não há receita; projeção indisponível sem receita no mês", () => {
+    const periodo = P("2026-10-03T00:00", "2026-10-04T00:00");
+    const dre = calcularDRE({ periodo, parametros: params, vendas: [], lancamentos: [metaLanc({ instante: brt("2026-10-03T09:00"), valor: 100 })], manuais: [], opcoes: opcoes() });
+    expect(dre.indicadores.roas).toBeNull();
+    expect(dre.indicadores.poas).not.toBeNull();
+    const p = projecaoMes(dre, brt("2026-10-06T00:00"), TZ, brt("2026-10-03T00:00"));
+    expect("indisponivel" in p && p.indisponivel).toMatch(/sem receita ainda/);
+  });
+});

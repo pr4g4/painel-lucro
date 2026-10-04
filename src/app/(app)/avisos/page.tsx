@@ -1,5 +1,5 @@
 import { desc } from "drizzle-orm";
-import { db, schema } from "@/db";
+import { schema, executar } from "@/db";
 import { exigirSessao } from "@/lib/auth/sessao";
 import { ultimasColetas } from "@/lib/dados";
 import { fmtDataHora } from "@/lib/formato";
@@ -11,7 +11,7 @@ const TZ = process.env.APP_TZ ?? "America/Sao_Paulo";
 
 export default async function Avisos() {
   const s = await exigirSessao();
-  const [avisos, coletas] = await Promise.all([db.select().from(schema.avisos).orderBy(desc(schema.avisos.criadoEm)).limit(200), ultimasColetas()]);
+  const [avisos, coletas] = await Promise.all([executar((d) => d.select().from(schema.avisos).orderBy(desc(schema.avisos.criadoEm)).limit(200), 15000, "avisos"), ultimasColetas()]);
   const abertos = avisos.filter((a) => !a.resolvidoEm);
   const agora = Date.now();
   return (

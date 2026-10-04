@@ -3,6 +3,7 @@ import { coletarMeta, metaClienteReal } from "./meta";
 import { coletarOpenAI, openaiClienteReal } from "./openai";
 import { coletarKie, kieClienteReal } from "./kie";
 import { abrirAviso, type ResultadoColeta } from "./base";
+import { db, schema } from "@/db";
 
 export const FONTES = ["cambio", "meta", "openai", "kie", "zenith"] as const;
 export type Fonte = (typeof FONTES)[number];
@@ -38,6 +39,8 @@ export async function coletar(fonte: Fonte): Promise<ResultadoColeta> {
 
 async function naoConfigurada(fonte: string, vars: string): Promise<ResultadoColeta> {
   await abrirAviso("fonte_nao_configurada", fonte, `Fonte ${fonte} sem chave: defina ${vars} no host.`);
+  // registra a tentativa para o carimbo "tentou às HH:MM" (ok = false, erro explica)
+  await db.insert(schema.coletas).values({ fonte, terminadaEm: new Date(), ok: false, registros: 0, erro: `não configurada (${vars})` }).catch(() => {});
   return { fonte, ok: false, registros: 0, erro: `não configurada (${vars})` };
 }
 

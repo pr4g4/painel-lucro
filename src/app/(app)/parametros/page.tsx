@@ -1,5 +1,5 @@
 import { asc } from "drizzle-orm";
-import { db, schema } from "@/db";
+import { schema, executar } from "@/db";
 import { exigirSessao } from "@/lib/auth/sessao";
 import { PARAMETROS_PADRAO } from "@/lib/calculo";
 import { fmtDataHora } from "@/lib/formato";
@@ -16,7 +16,7 @@ const ROTULO: Record<string, string> = {
 export default async function Parametros() {
   const s = await exigirSessao();
   const edita = s.papel === "edita";
-  const [params, frentes, usuarios] = await Promise.all([db.select().from(schema.parametros).orderBy(asc(schema.parametros.chave), asc(schema.parametros.vigenciaInicio)), db.select().from(schema.frentes).orderBy(asc(schema.frentes.ordem)), db.select({ usuario: schema.usuarios.usuario, nome: schema.usuarios.nome, papel: schema.usuarios.papel }).from(schema.usuarios)]);
+  const [params, frentes, usuarios] = await Promise.all([executar((d) => d.select().from(schema.parametros).orderBy(asc(schema.parametros.chave), asc(schema.parametros.vigenciaInicio)), 15000, "parâmetros"), executar((d) => d.select().from(schema.frentes).orderBy(asc(schema.frentes.ordem)), 15000, "frentes"), executar((d) => d.select({ usuario: schema.usuarios.usuario, nome: schema.usuarios.nome, papel: schema.usuarios.papel }).from(schema.usuarios), 15000, "usuários")]);
   const chaves = [...new Set([...Object.keys(PARAMETROS_PADRAO), "kie_usd_por_credito", ...params.map((p) => p.chave)])];
   const agora = new Date();
   return (

@@ -105,7 +105,7 @@ export async function calcularPeriodoComAnterior(periodo: Periodo, op: OpcoesCon
 }
 
 /** Última coleta por fonte, para o carimbo "atualizado às": uma linha por fonte, agregada no banco. */
-export type EstadoColeta = { ultimaOk: Date | null; ultima: Date; erro: string | null; falhasSeguidas: number };
+export type EstadoColeta = { ultimaOk: Date | null; ultima: Date; erro: string | null; falhasSeguidas: number; naoConfigurada: boolean };
 export async function ultimasColetas(): Promise<Map<string, EstadoColeta>> {
   const rows = await executar((d) => d.execute(sql`
     with ult_ok as (select fonte, max(coalesce(terminada_em, iniciada_em)) as ultima_ok from coletas where ok group by fonte)
@@ -117,7 +117,7 @@ export async function ultimasColetas(): Promise<Map<string, EstadoColeta>> {
     from coletas c left join ult_ok u on u.fonte = c.fonte
     group by c.fonte, u.ultima_ok`), 8000, "coletas") as unknown as { fonte: string; ultima: string | Date; ultima_ok: string | Date | null; falhas_seguidas: number; erro: string | null }[];
   const m = new Map<string, EstadoColeta>();
-  for (const r of rows) m.set(r.fonte, { ultima: new Date(r.ultima), ultimaOk: r.ultima_ok ? new Date(r.ultima_ok) : null, erro: r.erro, falhasSeguidas: r.falhas_seguidas });
+  for (const r of rows) m.set(r.fonte, { ultima: new Date(r.ultima), ultimaOk: r.ultima_ok ? new Date(r.ultima_ok) : null, erro: r.erro, falhasSeguidas: r.falhas_seguidas, naoConfigurada: /não configurada/.test(r.erro ?? "") });
   return m;
 }
 

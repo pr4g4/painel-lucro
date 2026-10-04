@@ -11,6 +11,14 @@ Atualizado em 04/10/2026. Nada aqui bloqueia o que já está pronto; cada item d
 3. **OpenAI — chave de administrador** (`sk-admin-…`, somente leitura de uso/custos) em `OPENAI_ADMIN_KEY`, e o id do projeto "Cenas Ligeras" em `OPENAI_PROJECT_ID`.
 4. **kie.ai — API key Default do Ian** em `KIE_API_KEY` **e o preço por crédito em US$** (parâmetro `kie_usd_por_credito` na tela Parâmetros; o exemplo usa 0,005 e está marcado como EXEMPLO). Verificar também se o painel do kie.ai tem log por requisição (daria uso por hora de verdade; hoje é por diferença de saldo).
 
+## Backfill da Zenith (vendas de 03/10 em diante que o webhook não pegou)
+1a. **Caminho garantido:** tela **Importar CSV** (menu). Exporte as vendas/depósitos do painel da Zenith em CSV e importe; não duplica.
+1b. **Pela API (quando você me passar o endpoint):** não consegui ler docs.zenithworld.com.br/payments-api daqui (saída bloqueada). A rota `/api/zenith/backfill` já existe e é configurável por variáveis na Vercel: `ZENITH_API_BASE` (ex.: https://api.zenithworld.com.br), `ZENITH_API_LIST_PATH` (ex.: `/v1/payments?from={desde}&to={ate}&page={page}`), `ZENITH_API_AUTH` (`bearer-secret` | `basic` | `headers`), `ZENITH_PUBLIC_KEY`, `ZENITH_SECRET_KEY`. Me mande da doc: o caminho do endpoint de listagem, os nomes dos parâmetros de data/página e como vai a chave (header). Depois: abra logado `https://painel-lucro.vercel.app/api/zenith/backfill?desde=2026-10-03T03:00:00Z&dry=1` (mostra o que encontrou sem gravar) e, se estiver certo, a mesma URL sem `dry=1`.
+
+## Agendador: como conferir que roda a cada 10 min
+- No painel, o selo **"agendador: há N min"** usa a coleta de câmbio como batimento (ela roda sempre). Mais de 15 min = parado.
+- No Supabase → SQL Editor: `select start_time, status, return_message from cron.job_run_details order by start_time desc limit 10;` Se `status = failed`, cole o `return_message` para mim. Fontes sem chave (Meta/OpenAI/kie) agora mostram "sem chave (tentou HH:MM)" em vez de uma hora antiga.
+
 ## Decisões a confirmar
 5. **Teste de sanidade do ZapData (R$ 126,68).** Pela fórmula 4 (ciclo dia 2 → dia 1), 12/09–02/10 dá R$ 83,17. O valor 126,68 = 33 dias × R$ 119 ÷ 31, ou seja, uma janela de 33 dias (ex.: 31/08–02/10). Divergência maior que R$ 1,00; implementei a fórmula 4 como escrita. Confirmar qual janela foi usada ou aceitar 83,17 como o número correto para 12/09–02/10.
 6. **Reembolso de venda histórica (anterior ao marco zero).** Hoje fica fora da receita (começamos do zero). Se quiser que apareça como linha negativa mesmo assim, é um ajuste de 1 linha.

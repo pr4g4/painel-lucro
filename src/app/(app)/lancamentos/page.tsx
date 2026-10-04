@@ -1,5 +1,5 @@
 import { and, desc, gte, lt, or, ilike, eq } from "drizzle-orm";
-import { db, schema } from "@/db";
+import { schema, executar } from "@/db";
 import { contextoPeriodo } from "@/lib/contexto";
 import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
@@ -22,11 +22,11 @@ export default async function Lancamentos({ searchParams }: { searchParams: Prom
   const linhas: Linha[] = [];
 
   if (!fonte || !["zenith", "manual"].includes(fonte)) {
-    const ls = await db.select().from(schema.lancamentos).where(and(gte(schema.lancamentos.instante, inicio), lt(schema.lancamentos.instante, fim), fonte ? eq(schema.lancamentos.fonte, fonte) : undefined, busca ? ilike(schema.lancamentos.descricao, `%${busca}%`) : undefined)).orderBy(desc(schema.lancamentos.instante)).limit(2000);
+    const ls = await executar((d) => d.select().from(schema.lancamentos).where(and(gte(schema.lancamentos.instante, inicio), lt(schema.lancamentos.instante, fim), fonte ? eq(schema.lancamentos.fonte, fonte) : undefined, busca ? ilike(schema.lancamentos.descricao, `%${busca}%`) : undefined)).orderBy(desc(schema.lancamentos.instante)).limit(2000), 20000, "lançamentos");
     for (const l of ls) linhas.push({ quando: l.instante, fonte: l.fonte, tipo: `${l.tipo} (${l.granularidade})${l.estimado ? " est." : ""}`, descricao: l.descricao, valorOriginal: Number(l.valorOriginal), moeda: l.moeda, valorBrl: Number(l.valorBrl), taxa: Number(l.taxaCambio), status: "ok", idOrigem: l.idOrigem ?? l.chaveNatural, historico: l.historico });
   }
   if (!fonte || ["zenith", "manual"].includes(fonte)) {
-    const vs = await db.select().from(schema.vendas).where(and(or(and(gte(schema.vendas.aprovadaEm, inicio), lt(schema.vendas.aprovadaEm, fim)), and(gte(schema.vendas.reembolsadaEm, inicio), lt(schema.vendas.reembolsadaEm, fim)), and(eq(schema.vendas.status, "pendente"), gte(schema.vendas.criadaEm, inicio), lt(schema.vendas.criadaEm, fim))), fonte ? eq(schema.vendas.fonte, fonte) : undefined, busca ? or(ilike(schema.vendas.produto, `%${busca}%`), ilike(schema.vendas.idOrigem, `%${busca}%`)) : undefined)).orderBy(desc(schema.vendas.aprovadaEm)).limit(2000);
+    const vs = await executar((d) => d.select().from(schema.vendas).where(and(or(and(gte(schema.vendas.aprovadaEm, inicio), lt(schema.vendas.aprovadaEm, fim)), and(gte(schema.vendas.reembolsadaEm, inicio), lt(schema.vendas.reembolsadaEm, fim)), and(eq(schema.vendas.status, "pendente"), gte(schema.vendas.criadaEm, inicio), lt(schema.vendas.criadaEm, fim))), fonte ? eq(schema.vendas.fonte, fonte) : undefined, busca ? or(ilike(schema.vendas.produto, `%${busca}%`), ilike(schema.vendas.idOrigem, `%${busca}%`)) : undefined)).orderBy(desc(schema.vendas.aprovadaEm)).limit(2000), 20000, "vendas");
     for (const v of vs) {
       const quando = v.aprovadaEm ?? v.criadaEm ?? v.coletadoEm;
       linhas.push({ quando, fonte: v.fonte, tipo: "venda", descricao: v.produto ?? "venda", valorOriginal: Number(v.brutoOriginal), moeda: v.moeda, valorBrl: Number(v.liquidoBrl), taxa: Number(v.taxaCambio), status: v.status, idOrigem: v.idOrigem, historico: v.historico });

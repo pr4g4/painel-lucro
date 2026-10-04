@@ -31,6 +31,7 @@ export function projecaoMes(dreMes: ResultadoDRE, agora: Date, tz: string, inici
   const local = toZonedTime(agora, tz);
   const diasNoMes = getDaysInMonth(local);
   if (diasDecorridos < 1) return { indisponivel: "menos de 1 dia de dados no mês" };
+  if (dreMes.totais.receitaLiquida <= 0 && dreMes.totais.numVendas === 0) return { indisponivel: "sem receita ainda — projeção indisponível" };
   const diasRestantes = diasNoMes - (toZonedTime(inicio, tz).getDate() - 1);
   const fator = diasRestantes / diasDecorridos;
   return {

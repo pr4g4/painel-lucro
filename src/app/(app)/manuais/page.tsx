@@ -1,5 +1,5 @@
 import { asc } from "drizzle-orm";
-import { db, schema } from "@/db";
+import { db, schema, executar } from "@/db";
 import { contextoPeriodo } from "@/lib/contexto";
 import { carregarManuais, carregarCambio } from "@/lib/dados";
 import { valorBrlNoPeriodo } from "@/lib/calculo";
@@ -17,14 +17,14 @@ export default async function Manuais({ searchParams }: { searchParams: Promise<
   const ctx = await contextoPeriodo(sp);
   const { estado, taxaMxn, sessao } = ctx;
   const edita = sessao.papel === "edita";
-  const [manuais, cats, cambio] = await Promise.all([carregarManuais(), db.select().from(schema.categorias).orderBy(asc(schema.categorias.nome)), carregarCambio()]);
+  const [manuais, cats, cambio] = await Promise.all([carregarManuais(), executar((d) => d.select().from(schema.categorias).orderBy(asc(schema.categorias.nome)), 15000, "categorias"), carregarCambio()]);
   const filtroTipo = typeof sp.tipo === "string" ? sp.tipo : "";
   const filtroCat = typeof sp.cat === "string" ? sp.cat : "";
   const linhas = manuais.filter((m) => (!filtroTipo || m.tipo === filtroTipo) && (!filtroCat || m.categoria === filtroCat))
     .map((m) => ({ m, noPeriodo: valorBrlNoPeriodo(m, estado.periodo, estado.tz, cambio) }));
   const total = linhas.reduce((s, l) => s + (l.m.tipo === "entrada" ? l.noPeriodo.brl : -l.noPeriodo.brl), 0);
   const editar = typeof sp.editar === "string" ? manuais.find((m) => String(m.id) === sp.editar) : undefined;
-  const editarRow = editar ? (await db.select().from(schema.lancamentosManuais)).find((r) => r.id === editar.id) : undefined;
+  const editarRow = editar ? (await executar((d) => d.select().from(schema.lancamentosManuais), 15000, "lançamento")).find((r) => r.id === editar.id) : undefined;
 
   return (
     <>

@@ -28,11 +28,15 @@ function atual(): Estado {
   return g.__painelDb;
 }
 
-/** Descarta o cliente atual sem matar consultas em andamento: o antigo fecha quando ficar ocioso. */
+/**
+ * Descarta o cliente atual. O antigo recebe 5 s para terminar o que estiver em andamento e depois é fechado à força:
+ * uma consulta pendurada num socket morto nunca terminaria sozinha e deixaria o pool (max 3) esgotado para sempre,
+ * travando todas as páginas servidas por esta instância (foi o que prendeu /resumo, /campanhas, /lancamentos e /avisos no esqueleto).
+ */
 export function reciclarConexao() {
   const velho = g.__painelDb;
   g.__painelDb = undefined;
-  if (velho) velho.sql.end().catch(() => {}); // sem timeout: espera as consultas pendentes terminarem
+  if (velho) velho.sql.end({ timeout: 5 }).catch(() => {});
   return atual();
 }
 
@@ -44,15 +48,29 @@ export function erroDeConexao(e: unknown): boolean {
   return CODIGOS_CONEXAO.some((c) => codes.includes(c) || msg.includes(c)) || /terminating connection|server closed the connection/i.test(msg);
 }
 
-/** Roda uma consulta; se falhar por conexão morta, troca o cliente e repete uma vez. Sem prazo artificial. */
-export async function executar<T>(fn: (db: Db) => Promise<T>, _prazoMs?: number, _rotulo?: string): Promise<T> {
-  try {
-    return await fn(atual().db);
-  } catch (e) {
-    if (!erroDeConexao(e)) throw e;
-    reciclarConexao();
-    return await fn(atual().db);
+export const PRAZO_PADRAO_MS = 15_000;
+
+/**
+ * Roda uma consulta com prazo (padrão 15 s). Se estourar o prazo ou falhar por conexão morta, recicla o cliente e repete
+ * UMA vez; se falhar de novo, lança erro (a página mostra "dado indisponível" em vez de ficar presa no esqueleto).
+ */
+export async function executar<T>(fn: (db: Db) => Promise<T>, prazoMs = PRAZO_PADRAO_MS, rotulo = "consulta"): Promise<T> {
+  for (let tentativa = 1; tentativa <= 2; tentativa++) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        fn(atual().db),
+        new Promise<T>((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error(`${rotulo}: tempo esgotado (${prazoMs / 1000} s)`), { code: "QUERY_TIMEOUT" })), prazoMs); }),
+      ]);
+    } catch (e) {
+      const recuperavel = erroDeConexao(e) || (e as { code?: string })?.code === "QUERY_TIMEOUT";
+      if (tentativa === 2 || !recuperavel) throw e;
+      reciclarConexao();
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
+  throw new Error("inalcançável");
 }
 
 /** Mantido para compatibilidade: uma consulta simples com a mesma regra de repetição (sem prazo curto, sem cascata). */
