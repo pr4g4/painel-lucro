@@ -40,7 +40,9 @@ export async function normalizarVenda(v: VendaZenithBruta, fonte = "zenith"): Pr
   const cambioPct = v.cambioPct ?? brutoBrl * numeroVigente(params, "cambio_zenith_pct", ref) / 100;
   // líquido antes da reserva: bruto − deduções. Se a fonte listou "líquido" já descontada a reserva, a reserva é somada de volta pelo cálculo (reserva não é custo).
   const liquidoCalc = brutoBrl - taxaPct - taxaFixa - cambioPct;
-  const reserva = v.reserva ?? 0;
+  // Reserva retida (não é custo). Se a fonte não informa, usa o parâmetro vigente (% do bruto):
+  // conferido com o painel da Zenith: MX$149→114,22, 99→74,21, 199→154,22 = (bruto − 7,99% − 5 − 2%) − 10% do bruto.
+  const reserva = v.reserva ?? (v.status === "pendente" ? 0 : brutoBrl * numeroVigente(params, "reserva_zenith_pct", ref, 10) / 100);
   const liquidoBrl = v.liquido != null && v.reserva != null ? v.liquido + v.reserva : v.liquido != null && v.reserva == null ? v.liquido : liquidoCalc;
   const aprovadaEm = v.status === "pendente" ? null : d(v.aprovadaEm);
   return {

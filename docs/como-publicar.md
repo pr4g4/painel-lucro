@@ -57,7 +57,12 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
 - **Meta:** Business Manager → Configurações → Usuários do sistema → criar usuário "painel" → **Gerar token** com permissão `ads_read` nas duas contas → colar em `META_TOKEN` na Vercel → Redeploy. No site, **Atualizar agora**; em **Avisos** aparece se a conta entregou dados por hora ou só por dia.
 - **OpenAI:** platform.openai.com → Settings → Organization → **Admin keys** → Create → colar em `OPENAI_ADMIN_KEY`. Em Settings → Projects, copie o ID do projeto "Cenas Ligeras" para `OPENAI_PROJECT_ID`.
 - **kie.ai:** painel do Ian → API Keys → copiar a "Default" → `KIE_API_KEY`. No site, **Parâmetros** → `kie_usd_por_credito` → preço real por crédito.
-- **Zenith:** depende do que existir em Integrações (ver `docs/pendencias.md`). Se houver webhook: URL `https://SEU-SITE.vercel.app/api/zenith/webhook?segredo=VALOR` e defina `ZENITH_WEBHOOK_SECRET` com o mesmo VALOR.
+- **Zenith (webhook oficial):**
+  1. **Tabela nova no banco (uma vez):** Supabase → SQL Editor → New query → cole o conteúdo de `drizzle/0001_zenith_eventos.sql` (raw: https://raw.githubusercontent.com/pr4g4/painel-lucro/main/drizzle/0001_zenith_eventos.sql) → Run.
+  2. Na Zenith → Integrações → Webhooks → **Adicionar endpoint**: URL `https://SEU-SITE.vercel.app/api/zenith/webhook`. Marque os eventos: `deposit.credited`, `payment.captured`, `checkout.succeeded`, `payment.pending`, `payment.refunded`, `payment.chargeback`. Copie o **segredo de assinatura** que a Zenith mostrar.
+  3. Vercel → Settings → Environment Variables → `ZENITH_WEBHOOK_SECRET` = esse segredo → Redeploy.
+  4. Teste: faça uma venda de teste (ou use "enviar evento de teste" na Zenith) e veja em **Lançamentos** (fonte Zenith) e em **Avisos**. Todo evento recebido fica guardado na tabela `zenith_eventos` (Supabase → Table Editor) para auditoria.
+  Regra: a mesma venda pode chegar como `deposit.credited` e também `payment.captured`/`checkout.succeeded`; o app conta a receita **uma vez por `referenceId`** (sem referenceId, por `data.id`). Reembolso entra como linha negativa na data do reembolso. Reserva retida = 10% do bruto (parâmetro).
 
 ## Se algo der errado
 - Site abre mas dá erro 500: quase sempre `DATABASE_URL` errada (senha ou `[YOUR-PASSWORD]` não trocado). Corrija em Settings → Environment Variables → Redeploy.

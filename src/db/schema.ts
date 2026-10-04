@@ -175,6 +175,20 @@ export const avisos = pgTable("avisos", {
   resolvidoEm: timestamp("resolvido_em", { withTimezone: true }),
 });
 
+// ---------- eventos recebidos da Zenith (auditoria + idempotência por X-Zenith-Event-Id) ----------
+export const zenithEventos = pgTable("zenith_eventos", {
+  id: serial("id").primaryKey(),
+  eventoId: text("evento_id").notNull().unique(), // X-Zenith-Event-Id
+  tipo: text("tipo").notNull(), // X-Zenith-Event-Type / body.type
+  timestampZenith: timestamp("timestamp_zenith", { withTimezone: true }),
+  recebidoEm: timestamp("recebido_em", { withTimezone: true }).notNull().defaultNow(),
+  assinaturaOk: boolean("assinatura_ok").notNull().default(false),
+  processado: boolean("processado").notNull().default(false),
+  resultado: text("resultado"), // ex.: "venda Z123 aprovada", "ignorado: tipo desconhecido", erro
+  vendaIdOrigem: text("venda_id_origem"),
+  payload: jsonb("payload").notNull(), // corpo bruto (JSON) — sem dados de cartão (a Zenith não envia PAN)
+}, (t) => [index("zenith_eventos_recebido").on(t.recebidoEm)]);
+
 export const visoesSalvas = pgTable("visoes_salvas", {
   id: serial("id").primaryKey(),
   nome: text("nome").notNull(),
