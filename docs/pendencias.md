@@ -1,6 +1,9 @@
 # Pendências (dependem do Erick)
 
-Atualizado em 03/10/2026 (noite). Nada aqui bloqueia o que já está pronto; cada item destrava uma fonte real.
+Atualizado em 04/10/2026. Nada aqui bloqueia o que já está pronto; cada item destrava uma fonte real.
+
+## Urgente
+0. **Trocar a senha do banco** (foi colada por engano no chat em 04/10). Supabase → Settings → Database → "Reset database password" → Generate → Update. Depois, na Vercel → Settings → Environment Variables → edite `DATABASE_URL` com a nova senha → Deployments → Redeploy. Depois rode de novo `supabase/agendador.sql`? Não precisa: o agendador chama a URL do site, não o banco.
 
 ## Bloqueiam fontes reais
 1. **Zenith — método de leitura (bloqueia o passo 4).** Abrir o painel da Zenith em Configurações / Integrações / Webhooks (ou Postback) e me dizer: (a) existe webhook por venda? (b) existe exportação CSV com data e hora? (c) a lista mostra líquido, reserva, status pendente, produto e "BRL estimado"? O app já tem o receptor (`/api/zenith/webhook`) e o leitor de CSV (`lerCsvZenith`); falta só saber o formato real. Enquanto isso, vendas entram pela tela **Venda manual**.
@@ -16,6 +19,9 @@ Atualizado em 03/10/2026 (noite). Nada aqui bloqueia o que já está pronto; cad
 
 ## Fase 1.5 (anotado, não fazer agora)
 9. Alerta no WhatsApp **+55 47 99149-8006** quando o lucro das últimas horas cair abaixo de um limite, e meta mensal com barra de progresso. O endpoint `/api/resumo` já devolve a linha pronta para mandar.
+
+## Verificar no iPhone (não tenho Safari aqui)
+- Menu hambúrguer, atalhos de período, botão "Opções" do seletor e tema: testados em Chromium emulando iPhone 13 (toque), não em Safari real. Se algum botão ainda não responder no iPhone, me diga qual e em qual tela.
 
 ## Observações do ambiente desta noite
 - O container onde desenvolvi bloqueia saída para Banco Central (PTAX), Meta e OpenAI; as chamadas reais só puderam ser escritas, não executadas. Primeira coleta real acontece na Vercel.

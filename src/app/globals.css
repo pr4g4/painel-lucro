@@ -127,3 +127,12 @@ a, button, select, input, summary, label { touch-action: manipulation; }
 .barras-hora { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end; height: 96px; }
 .barras-hora > div { background: var(--grad); border-radius: 4px 4px 2px 2px; min-height: 2px; opacity: .9; transition: height .3s ease; }
 .barras-hora-rotulos { display: grid; grid-template-columns: repeat(24, 1fr); font-size: 10px; color: var(--text-3); text-align: center; }
+
+/* tabelas largas no celular: dica de rolagem */
+@media (max-width: 767px) {
+  .card.overflow-x-auto { position: relative; -webkit-overflow-scrolling: touch; }
+  .card.overflow-x-auto::before { content: "deslize para o lado →"; display: block; font-size: 11px; color: var(--text-3); padding: 6px 12px 0; position: sticky; left: 0; }
+  table.tab { font-size: 13.5px; }
+  table.tab th, table.tab td { padding: 8px 10px; }
+  h1 { font-size: 1.15rem; }
+}

@@ -27,7 +27,18 @@ export default async function Avisos() {
           })}
         </div>
       </div>
-      <div className="card overflow-x-auto">
+      <div className="md:hidden flex flex-col gap-2">
+        {avisos.map((a) => (
+          <div key={a.id} className={`card p-3 text-sm ${a.resolvidoEm ? "text-ink-3" : ""}`}>
+            <div className="flex justify-between gap-2 text-xs"><span>{fmtDataHora(a.criadoEm, TZ, "dd/MM HH:mm")} · {a.fonte ? ROTULO_FONTE[a.fonte] ?? a.fonte : "—"}</span><span className={a.resolvidoEm ? "" : "text-warn"}>{a.resolvidoEm ? "resolvido" : "aberto"}</span></div>
+            <div className="mt-1">{a.mensagem}</div>
+            <div className="text-xs text-ink-3 mt-1">{a.tipo}</div>
+            {s.papel === "edita" && !a.resolvidoEm && <form action={resolverAviso} className="mt-2"><input type="hidden" name="id" value={a.id} /><button className="btn">resolver</button></form>}
+          </div>
+        ))}
+        {avisos.length === 0 && <div className="card p-3 text-ink-3 text-sm">Nenhum aviso.</div>}
+      </div>
+      <div className="card overflow-x-auto hidden md:block">
         <table className="tab">
           <thead><tr><th>Quando</th><th>Tipo</th><th>Fonte</th><th>Mensagem</th><th>Situação</th>{s.papel === "edita" && <th></th>}</tr></thead>
           <tbody>

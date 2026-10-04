@@ -15,6 +15,7 @@ export function SeletorPeriodo(props: {
   const [, start] = useTransition();
   const [de, setDe] = useState(props.deLocal); const [ate, setAte] = useState(props.ateLocal);
   const [abrir, setAbrir] = useState(props.atalho === "personalizado");
+  const [opcoes, setOpcoes] = useState(false);
 
   const ir = (q: string) => start(() => router.push(`${pathname}?${q}`));
   const base = new URLSearchParams(sp.toString());
@@ -36,8 +37,9 @@ export function SeletorPeriodo(props: {
       )}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-2">
         <span><b className="text-ink">{props.rotuloPeriodo}</b> · fuso {props.tz === "America/Mexico_City" ? "México" : "Brasília"}</span>
-        <span>vs. período anterior: {props.rotuloAnterior}</span>
-        <span className="ml-auto flex flex-wrap items-center gap-2">
+        <span className="text-xs">vs. anterior: {props.rotuloAnterior}</span>
+        <div className="md:hidden w-full"><button type="button" className="btn w-full justify-center" aria-expanded={opcoes} onClick={() => setOpcoes((v) => !v)}>{opcoes ? "Ocultar opções" : "Opções (fuso, moeda, histórico, link)"}</button></div>
+        <span className={`${opcoes ? "flex" : "hidden"} md:flex md:ml-auto flex-wrap items-center gap-2`}>
           <select value={props.tz} onChange={(e) => ir(queryDe({ tz: e.target.value }, base))} aria-label="Fuso horário">
             <option value="America/Sao_Paulo">Brasília</option><option value="America/Mexico_City">México</option>
           </select>

@@ -44,7 +44,28 @@ export function TabelaDRE(props: { atual: ColunaDRE; anterior: ColunaDRE; temBas
         </details>
         <button type="button" className="btn" onClick={csv}>Exportar CSV</button>
       </div>
-      <div className="overflow-x-auto">
+      {/* celular: lista rótulo/valor do total do período */}
+      <div className="md:hidden flex flex-col">
+        {linhasBase.filter((l) => !ocultas[l.chave]).map((l) => {
+          const a = props.temBase ? anteriorPor.get(l.chave)?.valor ?? null : null;
+          const d = a == null ? null : l.valor - a;
+          const pct = props.atual.receitaLiquida ? l.valor / props.atual.receitaLiquida : null;
+          return (
+            <div key={l.chave} className={`flex items-start justify-between gap-3 py-2 border-b border-border last:border-b-0 ${l.destaque ? "font-bold" : ""} ${l.informativo ? "text-ink-3 italic" : ""}`}>
+              <div className="min-w-0">
+                <div className="text-sm">{l.rotulo}{l.extra?.qtd != null && <span className="text-ink-3 text-xs ml-1">({String(l.extra.qtd)})</span>}</div>
+                {l.filhos && l.filhos.length > 0 && <div className="text-xs text-ink-3 mt-0.5">{l.filhos.map((f) => `${f.rotulo}: ${money(f.valor)}`).join(" · ")}</div>}
+              </div>
+              <div className="text-right num shrink-0">
+                <div className={l.valor < 0 && !l.informativo ? "neg" : ""}>{money(l.valor)}</div>
+                <div className="text-xs text-ink-3">{verPct && !l.informativo && pct != null ? fmtPctSimples(Math.abs(pct)) : ""}{verVar && d != null ? <span className={d >= 0 ? " pos" : " neg"}> {d >= 0 ? "+" : ""}{money(d)}</span> : ""}</div>
+              </div>
+            </div>
+          );
+        })}
+        {modo === "intervalos" && <p className="text-xs text-ink-3 mt-2">Colunas por intervalo: gire o celular ou use o computador.</p>}
+      </div>
+      <div className="overflow-x-auto hidden md:block">
         <table className="tab">
           <thead>
             <tr>
