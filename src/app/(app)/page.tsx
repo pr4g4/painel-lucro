@@ -1,6 +1,7 @@
 import { contextoPeriodo } from "@/lib/contexto";
 import { resolverAtalho, periodoAnterior } from "@/lib/calculo";
 import { dreFatiada } from "@/lib/fatias";
+import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
 import { Cartao } from "@/components/cartao";
 import { Grafico } from "@/components/grafico";
@@ -27,7 +28,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
 
   return (
     <>
-      <SeletorPeriodo {...ctx.propsSeletor} />
+      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       {ctx.problemas.length > 0 && <div className="card p-2 text-xs text-warn border-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
       <VisoesSalvas />
       <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2">

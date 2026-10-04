@@ -65,3 +65,22 @@ table.tab td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertic
 table.tab tr:last-child td { border-bottom: none; }
 .tr-destaque td { font-weight: 700; background: var(--surface-2); }
 .tr-info td { color: var(--text-3); font-style: italic; }
+
+/* ---------- toque e navegação (celular primeiro) ---------- */
+* { -webkit-tap-highlight-color: transparent; }
+a, button, select, input, summary, label { touch-action: manipulation; }
+.btn, .chip, .nav-item, select { min-height: 44px; display: inline-flex; align-items: center; }
+.chip { padding: 8px 14px; }
+@media (hover: hover) { .btn:hover { background: var(--surface-2); } }
+.topo { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--border); }
+.topo-inner { max-width: 80rem; margin: 0 auto; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
+.marca { font-weight: 700; white-space: nowrap; font-size: 17px; }
+.nav-desktop { display: none; flex: 1; gap: 2px; overflow-x: auto; }
+@media (min-width: 768px) { .nav-desktop { display: flex; } }
+.nav-item { position: relative; padding: 8px 10px; border-radius: 10px; white-space: nowrap; color: var(--text-2); font-size: 14px; }
+.nav-item.nav-ativo { background: var(--surface-2); color: var(--text); font-weight: 600; }
+.badge { margin-left: 6px; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--warn); color: #fff; font-size: 11px; font-weight: 700; }
+.gaveta { position: fixed; inset: 0; top: 61px; z-index: 40; background: var(--bg); display: flex; flex-direction: column; overflow-y: auto; }
+.gaveta-lista { display: flex; flex-direction: column; padding: 8px 12px; gap: 4px; }
+.gaveta-lista .nav-item { font-size: 18px; padding: 14px 12px; min-height: 52px; border: 1px solid var(--border); background: var(--surface); }
+.gaveta-rodape { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-top: 1px solid var(--border); }

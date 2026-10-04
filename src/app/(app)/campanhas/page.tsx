@@ -2,6 +2,7 @@ import { contextoPeriodo } from "@/lib/contexto";
 import { carregarLancamentos, carregarParametros } from "@/lib/dados";
 import { fatorImpostoMeta, numeroVigente } from "@/lib/calculo";
 import { db, schema } from "@/db";
+import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
 import { fmtMoeda } from "@/lib/formato";
 import type { Params } from "@/lib/periodo-url";
@@ -25,7 +26,7 @@ export default async function Campanhas({ searchParams }: { searchParams: Promis
   const total = linhas.reduce((s, l) => s + l.gasto, 0);
   return (
     <>
-      <SeletorPeriodo {...ctx.propsSeletor} />
+      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Campanhas <span className="text-xs text-ink-3 font-normal">gasto com imposto no período · total {fmtMoeda(total, estado.moeda, taxaMxn)} · sem ROAS por campanha na fase 1</span></h1>
       <div className="card overflow-x-auto">
         <table className="tab">

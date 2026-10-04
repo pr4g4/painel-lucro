@@ -3,6 +3,7 @@ import { db, schema } from "@/db";
 import { contextoPeriodo } from "@/lib/contexto";
 import { carregarManuais, carregarCambio } from "@/lib/dados";
 import { valorBrlNoPeriodo } from "@/lib/calculo";
+import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
 import { fmtDataHora, fmtMoeda, fmtNum } from "@/lib/formato";
 import { paraInputLocal, type Params } from "@/lib/periodo-url";
@@ -27,7 +28,7 @@ export default async function Manuais({ searchParams }: { searchParams: Promise<
 
   return (
     <>
-      <SeletorPeriodo {...ctx.propsSeletor} />
+      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Lançamentos manuais <span className="text-xs text-ink-3 font-normal">saídas e entradas, únicas ou recorrentes · saldo no período {fmtMoeda(total, estado.moeda, taxaMxn)}</span></h1>
       {edita && (
         <form action={salvarManual} className="card p-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-sm">

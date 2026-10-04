@@ -1,4 +1,5 @@
 import { contextoPeriodo } from "@/lib/contexto";
+import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
 import { fmtMoeda } from "@/lib/formato";
 import type { Params } from "@/lib/periodo-url";
@@ -11,7 +12,7 @@ export default async function Produtos({ searchParams }: { searchParams: Promise
   const { estado, atual, taxaMxn } = ctx;
   return (
     <>
-      <SeletorPeriodo {...ctx.propsSeletor} />
+      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Vendas por produto <span className="text-xs text-ink-3 font-normal">só com o produto informado pela fonte; nunca adivinhado pelo valor</span></h1>
       {atual.porProduto ? (
         <div className="card overflow-x-auto"><table className="tab">
