@@ -12,14 +12,35 @@ function cab(ts: string | number, corpo: string, extra: Partial<Record<string, s
 
 describe("assinatura do webhook da Zenith", () => {
   const corpo = JSON.stringify({ id: "evt_1", type: "payment.captured", data: { referenceId: "ref1", amount: 14900, currency: "MXN" } });
-  it("aceita assinatura válida (timestamp em segundos ou ms) e rejeita header faltando, janela > 300 s e assinatura errada", () => {
-    expect(verificarAssinatura(cab(Math.floor(agora / 1000), corpo), corpo, SEG, agora)).toBeNull();
-    expect(verificarAssinatura(cab(agora, corpo), corpo, SEG, agora)).toBeNull();
-    expect(verificarAssinatura(cab(agora, corpo, { "x-zenith-signature": null }), corpo, SEG, agora)).toMatch(/ausente/);
-    expect(verificarAssinatura(cab(agora - 301_000, corpo), corpo, SEG, agora)).toMatch(/300/);
-    expect(verificarAssinatura(cab(agora, corpo), corpo + " ", SEG, agora)).toMatch(/inválida/); // corpo alterado
-    expect(verificarAssinatura(cab(agora, corpo), corpo, "outro-segredo", agora)).toMatch(/inválida/);
-    expect(verificarAssinatura(cab(agora, corpo, { "x-zenith-signature": "zz" }), corpo, SEG, agora)).toMatch(/inválida/);
+  const motivo = (v: ReturnType<typeof verificarAssinatura>) => (v.ok ? null : v.motivo);
+  it("aceita assinatura válida (timestamp em segundos ou ms) e rejeita com motivo exato: header faltando, janela, assinatura, segredo vazio", () => {
+    expect(verificarAssinatura(cab(Math.floor(agora / 1000), corpo), corpo, SEG, agora).ok).toBe(true);
+    expect(verificarAssinatura(cab(agora, corpo), corpo, SEG, agora).ok).toBe(true);
+    expect(motivo(verificarAssinatura(cab(agora, corpo, { "x-zenith-signature": null }), corpo, SEG, agora))).toMatch(/header faltando: X-Zenith-Signature/);
+    expect(motivo(verificarAssinatura(cab(agora - 301_000, corpo), corpo, SEG, agora))).toMatch(/fora da janela de 300 s \(idade 301 s\)/);
+    expect(motivo(verificarAssinatura(cab(agora, corpo), corpo + " ", SEG, agora))).toMatch(/não confere/); // corpo alterado
+    expect(motivo(verificarAssinatura(cab(agora, corpo), corpo, "outro-segredo", agora))).toMatch(/não confere/);
+    expect(motivo(verificarAssinatura(cab(agora, corpo, { "x-zenith-signature": "zz" }), corpo, SEG, agora))).toMatch(/formato não reconhecido/);
+    expect(motivo(verificarAssinatura(cab(agora, corpo), corpo, "   ", agora))).toMatch(/segredo vazio/);
+  });
+  it("tolera variações: base64, prefixo sha256=/v1=, várias assinaturas, segredo com espaços/quebra, ms↔s, só-corpo", () => {
+    const ts = String(Math.floor(agora / 1000));
+    const hex = assinar(ts, corpo, SEG);
+    const b64 = Buffer.from(hex, "hex").toString("base64");
+    const ok = (sig: string, seg = SEG, t = ts) => verificarAssinatura(cab(t, corpo, { "x-zenith-signature": sig }), corpo, seg, agora);
+    expect(ok(b64).ok).toBe(true);
+    expect(ok(`sha256=${hex}`).ok).toBe(true);
+    expect(ok(`v1=${hex}`).ok).toBe(true);
+    expect(ok(`t=${ts},v1=${"0".repeat(64)},v1=${hex}`).ok).toBe(true);
+    expect(ok(hex, `  ${SEG}\n`).ok).toBe(true);
+    // Zenith assina com segundos mas manda o header em ms (ou vice-versa)
+    expect(ok(assinar(ts, corpo, SEG), SEG, String(Number(ts) * 1000)).ok).toBe(true);
+    // assinatura só do corpo (sem timestamp): aceita e registra a variante
+    const soCorpo = verificarAssinatura(cab(ts, corpo, { "x-zenith-signature": require("node:crypto").createHmac("sha256", SEG).update(corpo).digest("hex") }), corpo, SEG, agora);
+    expect(soCorpo.ok && soCorpo.variante).toMatch(/corpo sozinho/);
+    const ruim = ok("0".repeat(64));
+    expect(!ruim.ok && ruim.diag.formatos).toEqual(["hex"]);
+    expect(!ruim.ok && ruim.diag.sha256Corpo.length).toBe(64);
   });
 });
 
@@ -71,10 +92,22 @@ describe.skipIf(!process.env.DATABASE_URL)("rota do webhook (banco local)", () =
   }
   const soma = async () => (await db.execute(sql`select count(*)::int as n, coalesce(sum(liquido_brl) filter (where status='aprovada'),0)::float as liq, coalesce(sum(reserva_brl),0)::float as res from vendas`) as unknown as { n: number; liq: number; res: number }[])[0];
 
-  it("401 sem assinatura válida ou fora da janela; nada é gravado", async () => {
-    expect((await enviar("e0", "payment.captured", { referenceId: "r0", amount: 14900 }, { assinatura: "00" })).status).toBe(401);
-    expect((await enviar("e0", "payment.captured", { referenceId: "r0", amount: 14900 }, { ts: Date.now() - 400_000 })).status).toBe(401);
+  it("401 sem assinatura válida ou fora da janela: nenhuma venda, mas a rejeição fica gravada com motivo, corpo bruto e headers", async () => {
+    const a = await enviar("e0", "payment.captured", { referenceId: "r0", amount: 14900 }, { assinatura: "0".repeat(64) });
+    expect(a.status).toBe(401); expect(a.json.motivo).toMatch(/não confere/);
+    const b = await enviar("e0", "payment.captured", { referenceId: "r0", amount: 14900 }, { ts: Date.now() - 400_000 });
+    expect(b.status).toBe(401); expect(b.json.motivo).toMatch(/fora da janela/);
     expect((await soma()).n).toBe(0);
+    const rej = await db.select().from(schema.zenithEventos);
+    expect(rej.length).toBe(2);
+    expect(rej.every((r) => !r.assinaturaOk && r.resultado?.startsWith("401:") && r.eventoId.startsWith("e0#rejeitado#"))).toBe(true);
+    const pl = rej[0].payload as { corpoBruto: string; headers: Record<string, string>; diagnostico: { sha256Corpo: string } };
+    expect(pl.corpoBruto).toContain('"referenceId":"r0"');
+    expect(pl.headers["x-zenith-event-id"]).toBe("e0");
+    expect(JSON.stringify(pl)).not.toContain(SEG);
+    expect(pl.diagnostico.sha256Corpo.length).toBe(64);
+    // o reenvio válido do MESMO event id não é bloqueado pelas rejeições
+    await db.execute(sql`delete from zenith_eventos`);
   });
 
   it("deposit.credited cria a venda com líquido = bruto − 7,99% − 5 − 2% e reserva 10% do bruto (MX$149 → listado 114,22)", async () => {
