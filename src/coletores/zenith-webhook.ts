@@ -102,7 +102,9 @@ export function interpretarEvento(ev: EventoZenith, tipoHeader: string | null, t
   const tipo = String(ev.type ?? tipoHeader ?? "");
   if (!(TIPOS_TRATADOS as readonly string[]).includes(tipo)) return { ok: false, motivo: `tipo não tratado: ${tipo || "(vazio)"}`, desconhecido: !tipo };
   const d = (ev.data ?? {}) as Record<string, unknown>;
-  const identidade = String(g(d, "referenceId", "reference_id", "reference") ?? g(d, "id", "paymentId", "depositId") ?? eventId);
+  // identidade = id da venda na Zenith (= id_venda do CSV) > referenceId > id do evento; os outros ficam como ids alternativos
+  const candidatos = [g(d, "id", "paymentId", "checkoutId", "depositId"), g(d, "referenceId", "reference_id", "reference"), g(d, "saleId", "orderId")].filter(Boolean).map(String);
+  const identidade = candidatos[0] ?? eventId;
   const amountRaw = g(d, "amount", "amountCents", "value");
   const amount = typeof amountRaw === "number" ? amountRaw : typeof amountRaw === "string" ? Number(amountRaw) : NaN;
   const ehReembolso = tipo === "payment.refunded" || tipo === "payment.chargeback";
@@ -113,7 +115,7 @@ export function interpretarEvento(ev: EventoZenith, tipoHeader: string | null, t
   const bruto = Number.isFinite(amount) ? amount / 100 : 0; // centavos → unidades
   const produto = (g(d, "productName", "product", "description", "concept") as string | undefined) ?? null;
   const metodo = String(g(d, "paymentMethod", "method") ?? (tipo === "deposit.credited" ? "spei" : ""));
-  const base = { id: identidade, moeda: moeda as "MXN" | "BRL", bruto, produto, payload: { eventoId: eventId, tipo, metodo, data: d } };
+  const base = { id: identidade, moeda: moeda as "MXN" | "BRL", bruto, produto, ids: candidatos, payload: { eventoId: eventId, tipo, metodo, data: d } };
   if ((TIPOS_APROVACAO as readonly string[]).includes(tipo)) {
     return { ok: true, identidade, descricao: `${tipo}${metodo ? ` (${metodo})` : ""}`, venda: { ...base, status: "aprovada", criadaEm: quando, aprovadaEm: quando } };
   }

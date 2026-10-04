@@ -27,8 +27,8 @@ export async function salvarVendaManual(form: FormData) {
     criadaEm: aprovadaEm, aprovadaEm, reembolsadaEm: reembolsadaStr ? fromZonedTime(reembolsadaStr, tz) : (status !== "aprovada" ? aprovadaEm : null),
     moeda, bruto, brlEstimado: moeda === "BRL" ? bruto : brlEstimado,
     // taxa cobrada informada entra como taxa % única; fixa e câmbio ficam 0 para não dobrar
-    ...(taxaCobrada != null ? { taxaPct: moeda === "BRL" ? taxaCobrada : taxaCobrada * ((brlEstimado ?? bruto) / bruto), taxaFixa: 0, cambioPct: 0 } : {}),
-    ...(liquido != null ? { liquido: moeda === "BRL" ? liquido : liquido * ((brlEstimado ?? bruto) / bruto), reserva: 0 } : {}),
+    ...(taxaCobrada != null ? { taxaPct: taxaCobrada, taxaFixa: 0, cambioPct: 0 } : {}),
+    ...(liquido != null ? { liquido, reserva: 0 } : {}),
     produto: String(form.get("produto") || "") || null,
     payload: { origem: "manual", usuario: s.usuario, observacao: String(form.get("observacao") || "") },
   }, "manual");

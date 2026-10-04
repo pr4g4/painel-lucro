@@ -12,8 +12,9 @@ Atualizado em 04/10/2026. Nada aqui bloqueia o que já está pronto; cada item d
 4. **kie.ai — API key Default do Ian** em `KIE_API_KEY` **e o preço por crédito em US$** (parâmetro `kie_usd_por_credito` na tela Parâmetros; o exemplo usa 0,005 e está marcado como EXEMPLO). Verificar também se o painel do kie.ai tem log por requisição (daria uso por hora de verdade; hoje é por diferença de saldo).
 
 ## Backfill da Zenith (vendas de 03/10 em diante que o webhook não pegou)
-1a. **Caminho garantido:** tela **Importar CSV** (menu). Exporte as vendas/depósitos do painel da Zenith em CSV e importe; não duplica.
-1b. **Pela API (quando você me passar o endpoint):** não consegui ler docs.zenithworld.com.br/payments-api daqui (saída bloqueada). A rota `/api/zenith/backfill` já existe e é configurável por variáveis na Vercel: `ZENITH_API_BASE` (ex.: https://api.zenithworld.com.br), `ZENITH_API_LIST_PATH` (ex.: `/v1/payments?from={desde}&to={ate}&page={page}`), `ZENITH_API_AUTH` (`bearer-secret` | `basic` | `headers`), `ZENITH_PUBLIC_KEY`, `ZENITH_SECRET_KEY`. Me mande da doc: o caminho do endpoint de listagem, os nomes dos parâmetros de data/página e como vai a chave (header). Depois: abra logado `https://painel-lucro.vercel.app/api/zenith/backfill?desde=2026-10-03T03:00:00Z&dry=1` (mostra o que encontrou sem gravar) e, se estiver certo, a mesma URL sem `dry=1`.
+- **Caminho:** Zenith → Vendas → Conciliação em CSV → Baixar CSV → tela **Importar CSV** do app (sem editar o arquivo). Não duplica, nem com o webhook depois (mesmo `id_venda`; a `referencia` fica como id alternativo).
+- A API pública da Zenith não tem listagem (só GET /integrations/checkouts/:id etc.), então a rota de backfill por API foi removida.
+- Fim de semana/feriado usa a última PTAX até a data. Se a importação disser "sem câmbio", é porque não há NENHUMA taxa MXN gravada: clique "Atualizar agora" no painel (coleta de câmbio) e importe de novo.
 
 ## Agendador: como conferir que roda a cada 10 min
 - No painel, o selo **"agendador: há N min"** usa a coleta de câmbio como batimento (ela roda sempre). Mais de 15 min = parado.

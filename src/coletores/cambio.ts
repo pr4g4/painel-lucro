@@ -23,13 +23,18 @@ export const ptaxCliente: CambioCliente = {
     const r = await fetch(url, { cache: "no-store" });
     if (!r.ok) throw new Error(`PTAX ${par} HTTP ${r.status}`);
     const j = (await r.json()) as { value: { cotacaoVenda: number; dataHoraCotacao: string; tipoBoletim?: string }[] };
-    // Para moedas, pegar só o boletim de Fechamento (último do dia)
-    const porDia = new Map<string, number>();
+    // Para moedas o PTAX traz vários boletins por dia (Abertura, Intermediário, Fechamento/"Fechamento PTAX"):
+    // preferimos o que contém "Fechamento"; sem ele, fica o último do dia. Nunca deixar o dia sem taxa por causa do nome.
+    const porDia = new Map<string, { taxa: number; fechamento: boolean }>();
     for (const v of j.value) {
-      if (v.tipoBoletim && v.tipoBoletim !== "Fechamento") continue;
-      porDia.set(v.dataHoraCotacao.slice(0, 10), v.cotacaoVenda);
+      const dia = v.dataHoraCotacao.slice(0, 10);
+      const fechamento = !v.tipoBoletim || /fechamento/i.test(v.tipoBoletim);
+      const atual = porDia.get(dia);
+      if (!atual || fechamento || !atual.fechamento) porDia.set(dia, { taxa: v.cotacaoVenda, fechamento });
     }
-    return [...porDia.entries()].map(([dia, taxa]) => ({ dia, taxa })).sort((a, b) => a.dia.localeCompare(b.dia));
+    return [...porDia.entries()].map(([dia, x]) => ({ dia, taxa: x.taxa })).sort((a, b) => a.dia.localeCompare(b.dia));
+    // (linha abaixo mantida só para o tipo)
+    // eslint-disable-next-line no-unreachable
   },
 };
 

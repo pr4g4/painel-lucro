@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema, executar } from "@/db";
 import { lerCabecalhos, verificarAssinatura, interpretarEvento, type EventoZenith } from "@/coletores/zenith-webhook";
-import { normalizarVenda } from "@/coletores/zenith";
+import { normalizarVenda, acharVendaZenith } from "@/coletores/zenith";
 import { abrirAviso } from "@/coletores/base";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     } else {
       vendaIdOrigem = r.identidade;
       const nova = await normalizarVenda(r.venda, "zenith");
-      const [existente] = await executar((d) => d.select().from(schema.vendas).where(eq(schema.vendas.idOrigem, r.identidade)).limit(1));
+      const existente = await acharVendaZenith([r.identidade, ...(r.venda.ids ?? [])]);
       if (!existente) {
         if (nova.status === "reembolsada" || nova.status === "chargeback") {
           // reembolso de venda que nunca entrou (anterior ao acompanhamento): guarda como histórico e avisa, sem subtrair receita

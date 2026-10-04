@@ -13,7 +13,7 @@ export async function executarColeta(fonte: string, fn: () => Promise<{ registro
   try {
     const r = await fn();
     await db.update(schema.coletas).set({ terminadaEm: new Date(), ok: true, registros: r.registros, detalhe: r.detalhe ?? null }).where(eq(schema.coletas.id, c.id));
-    await resolverAvisos(fonte, "coleta_falhou");
+    for (const t of ["coleta_falhou", "fonte_nao_configurada", "sem_cambio", "webhook_rejeitado"]) await resolverAvisos(fonte, t);
     return { fonte, ok: true, registros: r.registros, detalhe: r.detalhe };
   } catch (e) {
     const erro = e instanceof Error ? e.message : String(e);

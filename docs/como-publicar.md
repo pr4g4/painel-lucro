@@ -62,6 +62,7 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
   2. Na Zenith → Integrações → Webhooks → **Adicionar endpoint**: URL `https://SEU-SITE.vercel.app/api/zenith/webhook`. Marque os eventos: `deposit.credited`, `payment.captured`, `checkout.succeeded`, `payment.pending`, `payment.refunded`, `payment.chargeback`. Copie o **segredo de assinatura** que a Zenith mostrar.
   3. Vercel → Settings → Environment Variables → `ZENITH_WEBHOOK_SECRET` = esse segredo → Redeploy.
   4. Teste: faça uma venda de teste (ou use "enviar evento de teste" na Zenith) e veja em **Lançamentos** (fonte Zenith) e em **Avisos**. Todo evento recebido fica guardado na tabela `zenith_eventos` (Supabase → Table Editor) para auditoria.
+  5. Vendas anteriores ao webhook: Zenith → Vendas → Conciliação em CSV → Baixar CSV → app → **Importar CSV**.
   Regra: a mesma venda pode chegar como `deposit.credited` e também `payment.captured`/`checkout.succeeded`; o app conta a receita **uma vez por `referenceId`** (sem referenceId, por `data.id`). Reembolso entra como linha negativa na data do reembolso. Reserva retida = 10% do bruto (parâmetro).
 
 ## Se algo der errado
