@@ -33,11 +33,13 @@ export function Menu({ nome, papel, avisos, sair }: { nome: string; papel: strin
       <div className="topo-inner">
         <Link href="/" className="marca">Painel de Lucro</Link>
         <nav className="nav-desktop" aria-label="Principal">{itens}</nav>
-        <span className="text-xs text-ink-3 hidden md:inline whitespace-nowrap">{nome} · {papel === "edita" ? "edita" : "só vê"}</span>
+        <span className="text-xs text-ink-3 hidden xl:inline whitespace-nowrap">{nome} · {papel === "edita" ? "edita" : "só vê"}</span>
         <div className="hidden md:flex items-center gap-2"><BotaoTema /><form action={sair}><button className="btn">Sair</button></form></div>
-        <button type="button" className="btn md:hidden" aria-label={aberto ? "Fechar menu" : "Abrir menu"} aria-expanded={aberto} onClick={() => setAberto((v) => !v)}>
-          {aberto ? "✕" : "☰"}{!aberto && avisos > 0 && <span className="badge">{avisos}</span>}
-        </button>
+        <div className="md:hidden ml-auto">
+          <button type="button" className="btn" aria-label={aberto ? "Fechar menu" : "Abrir menu"} aria-expanded={aberto} onClick={() => setAberto((v) => !v)}>
+            {aberto ? "✕" : "☰"}{!aberto && avisos > 0 && <span className="badge">{avisos}</span>}
+          </button>
+        </div>
       </div>
       {aberto && (
         <div className="gaveta md:hidden" role="dialog" aria-label="Menu">

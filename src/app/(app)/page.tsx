@@ -7,6 +7,7 @@ import { Cartao } from "@/components/cartao";
 import { Grafico } from "@/components/grafico";
 import { BotaoAtualizar } from "@/components/atualizar";
 import { VisoesSalvas } from "@/components/visoes";
+import { BlocoOperacao } from "@/components/operacao";
 import { fmtHora, fmtMoeda } from "@/lib/formato";
 import { ROTULO_FONTE } from "@/coletores";
 import type { Params } from "@/lib/periodo-url";
@@ -22,6 +23,8 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   const hojeAnt = periodoAnterior(hojeP, estado.tz);
   const hoje = { atual: ctx.calc(hojeP), anterior: ctx.calc(hojeAnt), temBaseAnterior: ctx.temDados(hojeAnt) };
   const fatias = dreFatiada(ctx.entrada, estado.periodo, estado.gran, estado.tz);
+  const mesP = resolverAtalho("mes_atual", estado.agora, estado.marcoZero, estado.tz).periodo;
+  const mes = ctx.calc(mesP);
 
   const dadosGrafico = fatias.map((f) => ({ rotulo: f.rotulo, receita: f.dre.totais.receitaLiquida, meta: f.dre.totais.metaComImposto, zapdata: f.dre.totais.zapdata, ia: f.dre.totais.ia, operacao: f.dre.totais.operacao, lucro: f.dre.totais.lucroLiquido }));
   const atrasadas = [...coletas.entries()].filter(([f, c]) => f !== "zenith" && (!c.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000));
@@ -43,6 +46,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
       </div>
 
       <Bloco titulo="Hoje" sub="vs. ontem até a mesma hora" dre={hoje.atual} ant={hoje.anterior} temBase={hoje.temBaseAnterior} moeda={estado.moeda} taxaMxn={taxaMxn} />
+      <BlocoOperacao hoje={hoje.atual} mes={mes} agora={estado.agora} tz={estado.tz} marcoZero={estado.marcoZero} moeda={estado.moeda} taxaMxn={taxaMxn} lancamentos={ctx.entrada.lancamentos} periodo={estado.periodo} params={ctx.params} incluirHistorico={estado.incluirHistorico} rotuloPeriodo={ctx.propsSeletor.rotuloPeriodo} />
       <Bloco titulo="Período selecionado" sub={ctx.propsSeletor.rotuloPeriodo} dre={atual} ant={anterior} temBase={temBaseAnterior} moeda={estado.moeda} taxaMxn={taxaMxn} />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -66,8 +70,8 @@ function Bloco({ titulo, sub, dre, ant, temBase, moeda, taxaMxn }: { titulo: str
     <section className="flex flex-col gap-2">
       <h2 className="font-semibold">{titulo} <span className="text-xs text-ink-3 font-normal">{sub}</span></h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        <Cartao rotulo="Lucro líquido" valor={t.lucroLiquido} anterior={a.lucroLiquido} destaque {...m} />
-        <Cartao rotulo="Metade para cada sócio" valor={t.porSocio} anterior={a.porSocio} {...m} />
+        <div className="col-span-2 sm:col-span-3 lg:col-span-2"><Cartao rotulo="Lucro líquido" valor={t.lucroLiquido} anterior={a.lucroLiquido} hero {...m} /></div>
+        <Cartao rotulo="Metade para cada sócio" valor={t.porSocio} anterior={a.porSocio} destaque {...m} />
         <Cartao rotulo="Receita líquida" valor={t.receitaLiquida} anterior={a.receitaLiquida} {...m} />
         <Cartao rotulo="Lucro bruto" valor={t.lucroBruto} anterior={a.lucroBruto} {...m} />
         <Cartao rotulo="Imposto sobre lucro" valor={t.impostoLucro} anterior={a.impostoLucro} inverterSinal {...m} />

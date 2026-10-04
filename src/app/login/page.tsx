@@ -12,8 +12,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="min-h-screen flex items-center justify-center p-4">
       <div className="card w-full max-w-sm p-6">
-        <h1 className="text-xl font-semibold mb-1">Painel de Lucro</h1>
-        <p className="text-sm text-ink-2 mb-5">Entre com seu usuário e senha.</p>
+        <h1 className="text-2xl font-extrabold mb-1 marca" style={{ fontSize: "1.6rem" }}>Painel de Lucro</h1>
+        <p className="text-sm text-ink-2 mb-5">Lucro líquido em tempo quase real. Entre com seu usuário e senha.</p>
         <FormLogin volta={volta ?? "/"} />
       </div>
     </main>
