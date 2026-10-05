@@ -60,18 +60,23 @@ export async function coletarOpenAI(cliente: OpenAICliente, projectId: string | 
         tokensDia.set(dia, (tokensDia.get(dia) ?? 0) + tokens);
       }
     }
+    // custo médio por token nos dias que têm custo E tokens (para estimar o dia corrente, cujo custo a API ainda não fechou)
+    let custoRef = 0, tokensRef = 0;
+    for (const [dia, custo] of custoDia) { const t = tokensDia.get(dia) ?? 0; if (custo > 0 && t > 0) { custoRef += custo; tokensRef += t; } }
+    const custoPorToken = tokensRef > 0 ? custoRef / tokensRef : null;
     const rows: NovoLancamento[] = [];
     let semCambio = false;
     for (const h of horas) {
       const dia = h.instante.toISOString().slice(0, 10);
       const custo = custoDia.get(dia) ?? 0;
-      const usd = custo * (h.tokens / (tokensDia.get(dia) ?? 1));
+      const semCustoFechado = custo <= 0 && custoPorToken != null;
+      const usd = semCustoFechado ? h.tokens * custoPorToken : custo * (h.tokens / (tokensDia.get(dia) ?? 1));
       const cambio = await taxaDoDia("USDBRL", diaBrasilia(h.instante));
       if (!cambio) { semCambio = true; continue; }
       rows.push({
         fonte: "openai", tipo: "uso_ia", chaveNatural: `openai|${h.instante.toISOString()}|${h.modelo}`, instante: h.instante, granularidade: "hora",
-        descricao: `OpenAI ${h.modelo} (${h.tokens} tokens)`, valorOriginal: String(usd), moeda: "USD", valorBrl: String(usd * cambio.taxa), taxaCambio: String(cambio.taxa),
-        modelo: h.modelo, historico: h.instante < marco, estimado: true, payload: { tokens: h.tokens, custoDiaUsd: custo },
+        descricao: `OpenAI ${h.modelo} (${h.tokens} tokens${semCustoFechado ? ", estimado por tokens: custo do dia ainda não fechado" : ""})`, valorOriginal: String(usd), moeda: "USD", valorBrl: String(usd * cambio.taxa), taxaCambio: String(cambio.taxa),
+        modelo: h.modelo, historico: h.instante < marco, estimado: true, payload: { tokens: h.tokens, custoDiaUsd: custo, estimadoPorTokens: semCustoFechado },
       });
     }
     // Dias com custo mas sem uso (ex.: custo de outro tipo): grava um lançamento diário para não perder o valor

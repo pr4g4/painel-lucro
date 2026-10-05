@@ -8,6 +8,7 @@ import { Grafico } from "@/components/grafico";
 import { BotaoAtualizar } from "@/components/atualizar";
 import { VisoesSalvas } from "@/components/visoes";
 import { BlocoOperacao } from "@/components/operacao";
+import { CartoesCreditos } from "@/components/creditos";
 import { fmtHora, fmtMoeda } from "@/lib/formato";
 import { ROTULO_FONTE } from "@/coletores";
 import { ultimaTaxaMxnInfo, ROTULO_FONTE_CAMBIO } from "@/coletores/cambio";
@@ -35,6 +36,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
     <>
       <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       {ctx.problemas.length > 0 && <div className="card p-2 text-xs text-warn border-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
+      <CartoesCreditos tz={estado.tz} agora={estado.agora} edita={ctx.sessao.papel === "edita"} />
       <VisoesSalvas />
       <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2">
         <span>Atualizado:</span>

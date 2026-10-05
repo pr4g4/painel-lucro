@@ -48,5 +48,6 @@ async function naoConfigurada(fonte: string, vars: string): Promise<ResultadoCol
 export async function coletarTudo(): Promise<ResultadoColeta[]> {
   const out: ResultadoColeta[] = [];
   for (const f of FONTES) out.push(await coletar(f));
+  try { const { verificarSaldos } = await import("./creditos"); await verificarSaldos(); } catch { /* alerta de saldo não derruba a coleta */ }
   return out;
 }

@@ -30,5 +30,8 @@ export async function GET(req: NextRequest) {
   const [cat] = await db.select().from(schema.categorias).where(eq(schema.categorias.nome, "ZapData"));
   const [zap] = await db.select().from(schema.lancamentosManuais).where(eq(schema.lancamentosManuais.descricao, "ZapData mensalidade")).limit(1);
   if (!zap) { await db.insert(schema.lancamentosManuais).values({ tipo: "saida", moeda: "BRL", valor: "119", categoriaId: cat.id, descricao: "ZapData mensalidade", frequencia: "mensal", comecaEm: new Date("2026-10-02T03:00:00Z"), ativo: true }); feito.push("ZapData recorrente"); }
+  // Referência inicial de saldo da OpenAI (conferida no painel de Billing): US$ 8,03 em 04/10/2026 23:48 Brasília
+  await db.insert(schema.lancamentos).values({ fonte: "openai", tipo: "saldo_ref", chaveNatural: "openai|saldo_ref|2026-10-05T02:48:00.000Z", instante: new Date("2026-10-05T02:48:00.000Z"), granularidade: "minuto", descricao: "OpenAI saldo conferido no painel de Billing: US$ 8.03", valorOriginal: "8.03", moeda: "USD", valorBrl: "0", taxaCambio: "0", historico: false, estimado: false, payload: { origem: "seed" } }).onConflictDoNothing();
+  feito.push("referência OpenAI 8,03");
   return NextResponse.json({ ok: true, feito });
 }

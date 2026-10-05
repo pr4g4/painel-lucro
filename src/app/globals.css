@@ -71,8 +71,8 @@ h1 { font-size: 1.25rem; letter-spacing: -0.01em; }
 .card-hero .sub { color: rgba(255,255,255,.8); }
 .card-suave { background: var(--grad-soft); }
 .rotulo { font-size: .78rem; color: var(--text-2); font-weight: 500; }
-.valor { font-weight: 800; font-size: 1.5rem; line-height: 1.15; }
-.valor-xl { font-weight: 800; font-size: clamp(2rem, 7vw, 2.75rem); line-height: 1.05; }
+.valor { font-weight: 800; font-size: clamp(1.15rem, 5.2vw, 1.5rem); line-height: 1.15; white-space: nowrap; }
+.valor-xl { font-weight: 800; font-size: clamp(2rem, 7vw, 2.75rem); line-height: 1.05; white-space: nowrap; }
 .pos { color: var(--pos); } .neg { color: var(--neg); }
 .card-hero .pos, .card-hero .neg { color: #fff; }
 .card-hero-neg { background: linear-gradient(135deg, #1d4ed8 0%, #7c2d12 55%, #b91c1c 100%); }

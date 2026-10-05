@@ -1,6 +1,7 @@
 import { contextoPeriodo } from "@/lib/contexto";
 import { resolverAtalho, periodoAnterior } from "@/lib/calculo";
 import { Cartao } from "@/components/cartao";
+import { CartoesCreditos } from "@/components/creditos";
 import { faltaParaEmpatar, projecaoMes } from "@/lib/calculo";
 import { fmtHora } from "@/lib/formato";
 import type { Params } from "@/lib/periodo-url";
@@ -22,6 +23,7 @@ export default async function Resumo({ searchParams }: { searchParams: Promise<P
   return (
     <>
       <h1 className="font-semibold">Resumo <span className="text-xs text-ink-3 font-normal">hoje e mês atual · {fontes}</span></h1>
+      <CartoesCreditos tz={estado.tz} agora={estado.agora} edita={ctx.sessao.papel === "edita"} />
       <Cartao rotulo="Lucro líquido hoje" valor={hoje.totais.lucroLiquido} anterior={hojeAnt.totais.lucroLiquido} temBase={ctx.temDados(periodoAnterior(hojeP, estado.tz))} hero {...m} />
       <div className="grid grid-cols-2 gap-2">
         <Cartao rotulo="Metade para cada sócio (hoje)" valor={hoje.totais.porSocio} temBase={false} destaque {...m} />
