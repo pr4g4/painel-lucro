@@ -6,7 +6,7 @@ import { SeletorPeriodo } from "@/components/seletor-periodo";
 import { fmtDataHora, fmtNum } from "@/lib/formato";
 import { ROTULO_FONTE } from "@/coletores";
 import type { Params } from "@/lib/periodo-url";
-import { carregarManuais, carregarCambio } from "@/lib/dados";
+import { carregarManuaisCache, carregarCambioCache } from "@/lib/dados";
 import { valorBrlNoPeriodo } from "@/lib/calculo";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export default async function Lancamentos({ searchParams }: { searchParams: Prom
     }
   }
   if (!fonte || fonte === "manual") {
-    const [manuais, cambio] = await Promise.all([carregarManuais(), carregarCambio()]);
+    const [manuais, cambio] = await Promise.all([carregarManuaisCache(), carregarCambioCache()]);
     for (const m of manuais) {
       if (busca && !m.descricao.toLowerCase().includes(busca.toLowerCase())) continue;
       const r = valorBrlNoPeriodo(m, estado.periodo, estado.tz, cambio);

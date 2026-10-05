@@ -1,13 +1,14 @@
-import { asc } from "drizzle-orm";
-import { db, schema, executar } from "@/db";
+import { eq } from "drizzle-orm";
+import { schema, executar } from "@/db";
 import { contextoPeriodo } from "@/lib/contexto";
-import { carregarManuais, carregarCambio } from "@/lib/dados";
+import { carregarManuaisCache, carregarCambioCache, carregarCategoriasCache } from "@/lib/dados";
 import { valorBrlNoPeriodo } from "@/lib/calculo";
 import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
 import { fmtDataHora, fmtMoeda, fmtNum } from "@/lib/formato";
 import { paraInputLocal, type Params } from "@/lib/periodo-url";
 import { salvarManual, excluirManual, salvarCategoria, excluirCategoria } from "./acoes";
+import { FormGravar } from "@/components/form-gravar";
 
 export const dynamic = "force-dynamic";
 const FREQ: [string, string][] = [["unica", "única"], ["diaria", "diária"], ["semanal", "semanal"], ["mensal", "mensal"], ["trimestral", "trimestral"], ["semestral", "semestral"], ["anual", "anual"]];
@@ -17,21 +18,21 @@ export default async function Manuais({ searchParams }: { searchParams: Promise<
   const ctx = await contextoPeriodo(sp);
   const { estado, taxaMxn, sessao } = ctx;
   const edita = sessao.papel === "edita";
-  const [manuais, cats, cambio] = await Promise.all([carregarManuais(), executar((d) => d.select().from(schema.categorias).orderBy(asc(schema.categorias.nome)), 15000, "categorias"), carregarCambio()]);
+  const [manuais, cats, cambio] = await Promise.all([carregarManuaisCache(), carregarCategoriasCache(), carregarCambioCache()]);
   const filtroTipo = typeof sp.tipo === "string" ? sp.tipo : "";
   const filtroCat = typeof sp.cat === "string" ? sp.cat : "";
   const linhas = manuais.filter((m) => (!filtroTipo || m.tipo === filtroTipo) && (!filtroCat || m.categoria === filtroCat))
     .map((m) => ({ m, noPeriodo: valorBrlNoPeriodo(m, estado.periodo, estado.tz, cambio) }));
   const total = linhas.reduce((s, l) => s + (l.m.tipo === "entrada" ? l.noPeriodo.brl : -l.noPeriodo.brl), 0);
   const editar = typeof sp.editar === "string" ? manuais.find((m) => String(m.id) === sp.editar) : undefined;
-  const editarRow = editar ? (await executar((d) => d.select().from(schema.lancamentosManuais), 15000, "lançamento")).find((r) => r.id === editar.id) : undefined;
+  const editarRow = editar ? (await executar((d) => d.select().from(schema.lancamentosManuais).where(eq(schema.lancamentosManuais.id, Number(editar.id))), 15000, "lançamento"))[0] : undefined;
 
   return (
     <>
       <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Lançamentos manuais <span className="text-xs text-ink-3 font-normal">saídas e entradas, únicas ou recorrentes · saldo no período {fmtMoeda(total, estado.moeda, taxaMxn)}</span></h1>
       {edita && (
-        <form action={salvarManual} className="card p-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-sm">
+        <FormGravar acao={salvarManual} className="card p-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-sm" botao={editarRow ? "Salvar alteração" : "Adicionar"} extra={editarRow ? <a href="/manuais" className="btn">Cancelar</a> : null}>
           <input type="hidden" name="tz" value={estado.tz} />
           {editarRow && <input type="hidden" name="id" value={editarRow.id} />}
           <label>Tipo<select name="tipo" defaultValue={editarRow?.tipo ?? "saida"} className="w-full"><option value="saida">Saída</option><option value="entrada">Entrada</option></select></label>
@@ -43,8 +44,7 @@ export default async function Manuais({ searchParams }: { searchParams: Promise<
           <label>Começa em<input type="datetime-local" name="comecaEm" required defaultValue={editarRow ? paraInputLocal(editarRow.comecaEm, estado.tz) : paraInputLocal(estado.agora, estado.tz)} className="w-full" /></label>
           <label>Termina em (opcional)<input type="datetime-local" name="terminaEm" defaultValue={editarRow?.terminaEm ? paraInputLocal(editarRow.terminaEm, estado.tz) : ""} className="w-full" /></label>
           <label>Status<select name="ativo" defaultValue={editarRow && !editarRow.ativo ? "pausado" : "ativo"} className="w-full"><option value="ativo">ativo</option><option value="pausado">pausado</option></select></label>
-          <div className="flex items-end gap-2"><button className="btn btn-primary">{editarRow ? "Salvar alteração" : "Adicionar"}</button>{editarRow && <a href="/manuais" className="btn">Cancelar</a>}</div>
-        </form>
+        </FormGravar>
       )}
       <form className="flex flex-wrap gap-2 text-sm items-end">
         {Object.entries(sp).filter(([k]) => !["tipo", "cat"].includes(k)).map(([k, v]) => <input key={k} type="hidden" name={k} value={String(v)} />)}

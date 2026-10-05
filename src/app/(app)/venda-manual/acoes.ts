@@ -10,7 +10,13 @@ import { and, eq } from "drizzle-orm";
 
 const num = (s: FormDataEntryValue | null) => { const n = Number(String(s ?? "").replace(",", ".")); return Number.isFinite(n) ? n : null; };
 
-export async function salvarVendaManual(form: FormData) {
+export type EstadoGravar = { ok: boolean; mensagem: string } | undefined;
+
+export async function salvarVendaManual(_prev: EstadoGravar, form: FormData): Promise<EstadoGravar> {
+  try { return await gravarVenda(form); } catch (e) { return { ok: false, mensagem: `Não gravou: ${e instanceof Error ? e.message : String(e)}` }; }
+}
+
+async function gravarVenda(form: FormData): Promise<EstadoGravar> {
   const s = await exigirSessao("edita");
   const tz = String(form.get("tz") || "America/Sao_Paulo");
   const status = String(form.get("status")) as "aprovada" | "reembolsada" | "chargeback";
@@ -36,6 +42,7 @@ export async function salvarVendaManual(form: FormData) {
   venda.observacao = String(form.get("observacao") || "") || null;
   await upsertVendas([venda]);
   revalidatePath("/"); invalidarDados(); revalidatePath("/venda-manual"); revalidatePath("/dre"); revalidatePath("/lancamentos");
+  return { ok: true, mensagem: `Venda ${id} registrada.` };
 }
 
 export async function excluirVendaManual(form: FormData) {

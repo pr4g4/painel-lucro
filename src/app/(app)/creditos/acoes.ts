@@ -1,4 +1,5 @@
 "use server";
+import { fmtUSD } from "@/lib/formato";
 import { revalidatePath } from "next/cache";
 import { invalidarDados } from "@/lib/cache";
 import { fromZonedTime } from "date-fns-tz";
@@ -20,10 +21,10 @@ export async function registrarCreditoOpenAI(_prev: { ok?: boolean; mensagem?: s
   if (Number.isNaN(quando.getTime())) return { ok: false, mensagem: "Data/hora inválida." };
   await executar((d) => d.insert(schema.lancamentos).values({
     fonte: "openai", tipo, chaveNatural: `openai|${tipo}|${quando.toISOString()}`, instante: quando, granularidade: "minuto",
-    descricao: tipo === "saldo_ref" ? `OpenAI saldo conferido no painel de Billing: US$ ${valor.toFixed(2)}` : `OpenAI recarga de créditos: US$ ${valor.toFixed(2)}`,
+    descricao: tipo === "saldo_ref" ? `OpenAI saldo conferido no painel de Billing: ${fmtUSD(valor)}` : `OpenAI recarga de créditos: ${fmtUSD(valor)}`,
     valorOriginal: String(valor), moeda: "USD", valorBrl: "0", taxaCambio: "0", historico: false, estimado: false, payload: { usuario: s.usuario },
   }).onConflictDoUpdate({ target: schema.lancamentos.chaveNatural, set: { valorOriginal: String(valor), coletadoEm: new Date() } }));
   await verificarSaldos().catch(() => {});
   revalidatePath("/"); invalidarDados(); revalidatePath("/resumo"); revalidatePath("/avisos");
-  return { ok: true, mensagem: tipo === "saldo_ref" ? `Referência gravada: US$ ${valor.toFixed(2)}.` : `Recarga de US$ ${valor.toFixed(2)} registrada (não entra como custo).` };
+  return { ok: true, mensagem: tipo === "saldo_ref" ? `Referência gravada: ${fmtUSD(valor)}.` : `Recarga de ${fmtUSD(valor)} registrada (não entra como custo).` };
 }

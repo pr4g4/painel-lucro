@@ -15,7 +15,7 @@ import { parametroVigente } from "@/lib/calculo";
 const n = (x: string | number | null | undefined) => (x == null ? 0 : Number(x));
 
 export async function carregarParametros(): Promise<Parametro[]> {
-  const rows = await executar((d) => d.select().from(schema.parametros).orderBy(asc(schema.parametros.vigenciaInicio)), 8000, "parâmetros");
+  const rows = await executar((d) => d.select().from(schema.parametros).orderBy(asc(schema.parametros.vigenciaInicio)), 15000, "parâmetros");
   return rows.map((r) => ({ chave: r.chave, valor: r.valor, vigenciaInicio: r.vigenciaInicio, vigenciaFim: r.vigenciaFim }));
 }
 
@@ -27,7 +27,7 @@ export async function marcoZero(params?: Parametro[]): Promise<Date> {
 
 /** Monta a função de câmbio: taxa do dia; sem taxa no dia, usa a última anterior (fim de semana/feriado). */
 export async function carregarCambio(): Promise<CambioFn> {
-  const rows = await executar((d) => d.select().from(schema.cambio).orderBy(asc(schema.cambio.dia)), 8000, "câmbio");
+  const rows = await executar((d) => d.select().from(schema.cambio).orderBy(asc(schema.cambio.dia)), 15000, "câmbio");
   const porPar = new Map<string, { dia: string; taxa: number }[]>();
   for (const r of rows) {
     const arr = porPar.get(r.par) ?? [];
@@ -86,7 +86,7 @@ export async function carregarLancamentos(janela: Periodo): Promise<LancamentoCa
 
 export async function carregarManuais(): Promise<ManualCalc[]> {
   const rows = await executar((d) => d.select({ m: schema.lancamentosManuais, cat: schema.categorias })
-    .from(schema.lancamentosManuais).leftJoin(schema.categorias, eq(schema.categorias.id, schema.lancamentosManuais.categoriaId)), 8000, "lançamentos manuais");
+    .from(schema.lancamentosManuais).leftJoin(schema.categorias, eq(schema.categorias.id, schema.lancamentosManuais.categoriaId)), 15000, "lançamentos manuais");
   return rows.map(({ m, cat }) => ({
     id: m.id, tipo: m.tipo, moeda: m.moeda, valor: n(m.valor), categoria: cat?.nome ?? "sem categoria", linhaDre: cat?.linhaDre ?? "operacao",
     descricao: m.descricao, frequencia: m.frequencia, comecaEm: m.comecaEm, terminaEm: m.terminaEm, ativo: m.ativo,
@@ -158,9 +158,17 @@ const lancamentosCache = unstable_cache(async (ini: string, fim: string) => {
 const parametrosCache = unstable_cache(async () => (await carregarParametros()).map((p) => ({ ...p, vigenciaInicio: p.vigenciaInicio.toISOString(), vigenciaFim: p.vigenciaFim?.toISOString() ?? null })), ["parametros"], { revalidate: 60, tags: [TAG_DADOS] });
 const manuaisCache = unstable_cache(async () => (await carregarManuais()).map((m) => ({ ...m, comecaEm: m.comecaEm.toISOString(), terminaEm: m.terminaEm?.toISOString() ?? null })), ["manuais"], { revalidate: 60, tags: [TAG_DADOS] });
 const cambioCache = unstable_cache(async () => {
-  const rows = await db.select().from(schema.cambio).orderBy(asc(schema.cambio.dia));
+  const rows = await executar((d) => d.select().from(schema.cambio).orderBy(asc(schema.cambio.dia)), 15000, "câmbio");
   return rows.map((r) => ({ dia: r.dia, par: r.par, taxa: Number(r.taxa) }));
 }, ["cambio"], { revalidate: 60, tags: [TAG_DADOS] });
+const categoriasCache = unstable_cache(async () => executar((d) => d.select().from(schema.categorias).orderBy(asc(schema.categorias.nome)), 15000, "categorias"), ["categorias"], { revalidate: 60, tags: [TAG_DADOS] });
+
+/** Versões com cache de 60 s (mesma tag "dados" invalidada em toda gravação) para as telas de cadastro: evita "dado indisponível" em instância fria. */
+export async function carregarManuaisCache(): Promise<ManualCalc[]> {
+  return (await manuaisCache()).map((m) => ({ ...m, comecaEm: new Date(m.comecaEm), terminaEm: dataOuNull(m.terminaEm) }));
+}
+export async function carregarCambioCache(): Promise<CambioFn> { return cambioDeLinhas(await cambioCache()); }
+export async function carregarCategoriasCache() { return categoriasCache(); }
 
 function cambioDeLinhas(rows: { dia: string; par: string; taxa: number }[]): CambioFn {
   const porPar = new Map<string, { dia: string; taxa: number }[]>();

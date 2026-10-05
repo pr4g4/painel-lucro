@@ -14,7 +14,7 @@ import { CartoesCreditos } from "@/components/creditos";
 import { carregarCreditos } from "@/coletores/creditos";
 import { semaforoSaldo, coletaFalhando } from "@/lib/hoje";
 import { faltaParaEmpatar, gastoPorNumero } from "@/lib/calculo";
-import { fmtHora, fmtMoeda, fmtMXN, fmtHorasRestantes } from "@/lib/formato";
+import { fmtHora, fmtMoeda, fmtMXN, fmtHorasRestantes, fmtNum, fmtPctSimples, fmtRazao } from "@/lib/formato";
 import { ROTULO_FONTE } from "@/coletores";
 import { ultimaTaxaMxnInfo, ROTULO_FONTE_CAMBIO } from "@/coletores/cambio";
 import type { Params } from "@/lib/periodo-url";
@@ -87,7 +87,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
         <Metrica rotulo="Nº de vendas" valor={t.numVendas} anterior={a.numVendas} formato="int" temBase={temBaseAnterior} />
       </section>
 
-      <Secao id="indicadores" titulo="Indicadores" resumo={`margem ${i.margemLiquida == null ? "—" : `${(i.margemLiquida * 100).toFixed(1)}%`} · ROAS ${i.roas == null ? "—" : `${i.roas.toFixed(2)}×`}`}>
+      <Secao id="indicadores" titulo="Indicadores" resumo={`margem ${fmtPctSimples(i.margemLiquida)} · ROAS ${fmtRazao(i.roas)}`}>
         <div className="grade-metricas">
           {Math.abs(t.lucroBruto - t.lucroLiquido) >= 0.005 && <Metrica rotulo="Lucro bruto" valor={t.lucroBruto} anterior={a.lucroBruto} colorir {...base} />}
           <Metrica rotulo="Margem líquida" valor={i.margemLiquida} anterior={ia.margemLiquida} formato="pct" temBase={temBaseAnterior} />
@@ -129,7 +129,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
       <Secao id="graficos" titulo="Gráficos" resumo={`lucro por ${estado.gran} · ${fatias.length} pontos`}>
         <Grafico dados={dadosGrafico} titulo={`Receita líquida × custos empilhados + lucro líquido (por ${estado.gran})`} />
         <GastoPorHora lancamentos={ctx.entrada.lancamentos} periodo={estado.periodo} tz={estado.tz} params={ctx.params} incluirHistorico={estado.incluirHistorico} rotuloPeriodo={ctx.propsSeletor.rotuloPeriodo} {...d} />
-        {estado.moeda === "MXN" && <p className="text-xs text-ink-3">Valores em MX$ convertidos de BRL pela última taxa MXN→BRL conhecida ({taxaMxn?.toFixed(4) ?? "—"}). Gráficos permanecem em R$.</p>}
+        {estado.moeda === "MXN" && <p className="text-xs text-ink-3">Valores em MX$ convertidos de BRL pela última taxa MXN→BRL conhecida ({fmtNum(taxaMxn, 4)}). Gráficos permanecem em R$.</p>}
       </Secao>
 
       <Secao id="projecao" titulo="Projeção e ponto de equilíbrio" resumo={falta.faltaReceita === 0 ? <span className="pos">hoje já está no lucro</span> : `falta ${money(falta.faltaReceita)} para empatar hoje`}>
@@ -151,7 +151,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
             const c = coletas.get(f);
             const atras = !c?.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000;
             let texto = c?.naoConfigurada ? `sem chave (tentou ${fmtHora(c.ultima, estado.tz)})` : c?.ultimaOk ? fmtHora(c.ultimaOk, estado.tz) : c ? `falhou ${fmtHora(c.ultima, estado.tz)}` : "nunca";
-            if (f === "cambio") texto += taxaMxnInfo ? ` · MXN ${taxaMxnInfo.taxa.toFixed(4)} (${ROTULO_FONTE_CAMBIO[taxaMxnInfo.fonte] ?? taxaMxnInfo.fonte}, ${taxaMxnInfo.dia.slice(8, 10)}/${taxaMxnInfo.dia.slice(5, 7)})` : " · sem taxa MXN";
+            if (f === "cambio") texto += taxaMxnInfo ? ` · MXN ${fmtNum(taxaMxnInfo.taxa, 4)} (${ROTULO_FONTE_CAMBIO[taxaMxnInfo.fonte] ?? taxaMxnInfo.fonte}, ${taxaMxnInfo.dia.slice(8, 10)}/${taxaMxnInfo.dia.slice(5, 7)})` : " · sem taxa MXN";
             return <span key={f} className={`px-2 py-0.5 rounded-full border border-border num ${atras && f !== "zenith" && !c?.naoConfigurada ? "text-warn" : c?.naoConfigurada ? "text-ink-3" : ""}`} title={c?.erro ?? ""}>{ROTULO_FONTE[f]} {texto}{f === "zenith" && !c?.ultimaOk ? " (webhook/CSV)" : ""}</span>;
           })}
           <span className={`px-2 py-0.5 rounded-full border border-border ${agendadorHa == null || agendadorHa > 15 ? "text-warn" : "text-pos"}`} title="O agendador (pg_cron) chama a coleta a cada 10 min; o câmbio roda sempre, então ele é o batimento.">agendador: {agendadorHa == null ? "nunca rodou" : `há ${agendadorHa} min`}</span>

@@ -6,6 +6,7 @@ import { SeletorPeriodo } from "@/components/seletor-periodo";
 import { fmtDataHora, fmtMoeda, fmtNum } from "@/lib/formato";
 import { paraInputLocal, type Params } from "@/lib/periodo-url";
 import { salvarVendaManual, excluirVendaManual } from "./acoes";
+import { FormGravar } from "@/components/form-gravar";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export default async function VendaManual({ searchParams }: { searchParams: Prom
       <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Venda manual <span className="text-xs text-ink-3 font-normal">para venda avulsa (SPEI sem cliente) que não aparece na Zenith · origem gravada como “manual”</span></h1>
       {edita && (
-        <form action={salvarVendaManual} className="card p-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-sm">
+        <FormGravar acao={salvarVendaManual} className="card p-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-sm" botao="Registrar venda">
           <input type="hidden" name="tz" value={estado.tz} />
           <label>Data/hora da aprovação<input type="datetime-local" name="aprovadaEm" required defaultValue={paraInputLocal(estado.agora, estado.tz)} className="w-full" /></label>
           <label>Moeda<select name="moeda" defaultValue="MXN" className="w-full"><option>MXN</option><option>BRL</option></select></label>
@@ -32,8 +33,7 @@ export default async function VendaManual({ searchParams }: { searchParams: Prom
           <label>Status<select name="status" defaultValue="aprovada" className="w-full"><option value="aprovada">aprovada</option><option value="reembolsada">reembolsada</option><option value="chargeback">chargeback</option></select></label>
           <label>Reembolsada em (se for o caso)<input type="datetime-local" name="reembolsadaEm" className="w-full" /></label>
           <label className="col-span-2">Observação<input name="observacao" className="w-full" /></label>
-          <div className="flex items-end"><button className="btn btn-primary">Registrar venda</button></div>
-        </form>
+        </FormGravar>
       )}
       <div className="card overflow-x-auto">
         <table className="tab">

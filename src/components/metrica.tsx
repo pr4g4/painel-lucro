@@ -1,5 +1,5 @@
 import { variacao } from "@/lib/calculo";
-import { fmtMoeda, fmtPct, pctFazSentido, type Moeda } from "@/lib/formato";
+import { fmtMoeda, fmtNum, fmtPct, fmtPctSimples, fmtRazao, pctFazSentido, type Moeda } from "@/lib/formato";
 
 export type FormatoMetrica = "moeda" | "razao" | "pct" | "int" | "texto";
 
@@ -8,8 +8,8 @@ export function textoMetrica(valor: number | null | undefined, formato: FormatoM
   if (valor == null || !Number.isFinite(valor)) return "—";
   switch (formato) {
     case "moeda": return fmtMoeda(valor, moeda, taxaMxn);
-    case "razao": return `${valor.toFixed(2)}×`;
-    case "pct": return `${(valor * 100).toFixed(1)}%`;
+    case "razao": return fmtRazao(valor);
+    case "pct": return fmtPctSimples(valor);
     default: return String(valor);
   }
 }
@@ -18,7 +18,7 @@ export function textoVariacao(valor: number | null | undefined, anterior: number
   const v = variacao(valor ?? 0, temBase && anterior != null ? anterior : null);
   if (v.abs == null) return { texto: "", bom: null };
   const sinal = v.abs >= 0 ? "+" : "";
-  const abs = formato === "moeda" ? fmtMoeda(v.abs, moeda, taxaMxn) : formato === "pct" ? `${(v.abs * 100).toFixed(1)} p.p.` : formato === "int" ? String(v.abs) : new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v.abs);
+  const abs = formato === "moeda" ? fmtMoeda(v.abs, moeda, taxaMxn) : formato === "pct" ? `${fmtNum(v.abs * 100, 1)} p.p.` : formato === "int" ? String(v.abs) : fmtNum(v.abs, 2);
   const comPct = v.pct != null && formato !== "pct" && pctFazSentido(valor ?? 0, anterior);
   return { texto: `${sinal}${abs}${comPct ? ` (${fmtPct(v.pct)})` : ""} vs. anterior`, bom: v.abs === 0 ? null : v.abs >= 0 };
 }

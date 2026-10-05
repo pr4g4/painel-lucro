@@ -81,7 +81,7 @@ export type LimitesSaldo = { horas: number; usd: number };
 /** Motivo do alerta ou null. */
 export function alertaSaldo(s: SaldoIA, lim: LimitesSaldo): string | null {
   if (s.indisponivel || s.saldoUsd == null) return null;
-  if (s.saldoUsd < lim.usd) return `saldo US$ ${s.saldoUsd.toFixed(2)} abaixo de US$ ${lim.usd}`;
-  if (s.horasRestantes != null && s.horasRestantes < lim.horas) return `acaba em ~${s.horasRestantes.toFixed(1)} h no ritmo atual (limite ${lim.horas} h)`;
+  if (s.saldoUsd < lim.usd) return `saldo US$ ${s.saldoUsd.toFixed(2).replace(".", ",")} abaixo de US$ ${lim.usd}`;
+  if (s.horasRestantes != null && s.horasRestantes < lim.horas) return `acaba em ~${s.horasRestantes.toFixed(1).replace(".", ",")} h no ritmo atual (limite ${lim.horas} h)`;
   return null;
 }

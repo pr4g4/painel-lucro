@@ -1,6 +1,6 @@
 import type { ResultadoDRE, Parametro, LancamentoCalc, Periodo } from "@/lib/calculo";
 import { faltaParaEmpatar, projecaoMes, gastoMetaPorHoraDoDia, gastoPorNumero } from "@/lib/calculo";
-import { fmtMoeda, type Moeda } from "@/lib/formato";
+import { fmtMoeda, fmtNum, fmtPctSimples, type Moeda } from "@/lib/formato";
 
 type Dinheiro = { moeda: Moeda; taxaMxn: number | null };
 const m = (d: Dinheiro) => (v: number) => fmtMoeda(v, d.moeda, d.taxaMxn);
@@ -25,7 +25,7 @@ export function Projecao({ mes, agora, tz, marcoZero, ...d }: { mes: ResultadoDR
     <div className="metrica">
       <div className="metrica-k">Projeção de lucro líquido do mês (ritmo desde o marco zero)</div>
       <div className={`metrica-v num ${proj.lucroLiquido < 0 ? "neg" : "pos"}`}>{money(proj.lucroLiquido)}</div>
-      <div className="metrica-s" style={{ whiteSpace: "normal" }}>{money(mes.totais.lucroLiquido)} em {proj.diasDecorridos.toFixed(1)} dia(s), projetado para {proj.diasConsiderados} dias · receita projetada {money(proj.receitaLiquida)}</div>
+      <div className="metrica-s" style={{ whiteSpace: "normal" }}>{money(mes.totais.lucroLiquido)} em {fmtNum(proj.diasDecorridos, 1)} dia(s), projetado para {proj.diasConsiderados} dias · receita projetada {money(proj.receitaLiquida)}</div>
     </div>
   );
 }
@@ -56,7 +56,7 @@ export function TabelaNumeros({ lancamentos, periodo, params, incluirHistorico, 
         <thead><tr><th>Número de WhatsApp</th><th className="text-right">Gasto Meta c/ imposto</th><th className="text-right">% do gasto</th><th className="text-right">Campanhas</th></tr></thead>
         <tbody>
           {Array.isArray(numeros) ? numeros.map((n) => (
-            <tr key={n.numero}><td className="font-semibold">{n.numero}</td><td className="text-right num">{money(n.gasto)}</td><td className="text-right num text-ink-2">{total ? `${(n.gasto / total * 100).toFixed(1)}%` : "—"}</td><td className="text-right num">{n.campanhas}</td></tr>
+            <tr key={n.numero}><td className="font-semibold">{n.numero}</td><td className="text-right num">{money(n.gasto)}</td><td className="text-right num text-ink-2">{total ? fmtPctSimples(n.gasto / total) : "—"}</td><td className="text-right num">{n.campanhas}</td></tr>
           )) : <tr><td colSpan={4} className="text-warn text-sm">dado indisponível: {numeros.indisponivel}</td></tr>}
         </tbody>
       </table>

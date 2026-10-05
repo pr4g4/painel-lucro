@@ -9,7 +9,13 @@ import { exigirSessao } from "@/lib/auth/sessao";
 const FREQ = ["unica", "diaria", "semanal", "mensal", "trimestral", "semestral", "anual"] as const;
 const num = (s: FormDataEntryValue | null) => Number(String(s ?? "").replace(",", "."));
 
-export async function salvarManual(form: FormData) {
+export type EstadoGravar = { ok: boolean; mensagem: string } | undefined;
+
+export async function salvarManual(_prev: EstadoGravar, form: FormData): Promise<EstadoGravar> {
+  try { return await gravarManual(form); } catch (e) { return { ok: false, mensagem: `Não gravou: ${e instanceof Error ? e.message : String(e)}` }; }
+}
+
+async function gravarManual(form: FormData): Promise<EstadoGravar> {
   const s = await exigirSessao("edita");
   const tz = String(form.get("tz") || "America/Sao_Paulo");
   const id = form.get("id") ? Number(form.get("id")) : null;
@@ -31,6 +37,7 @@ export async function salvarManual(form: FormData) {
   if (id) await db.update(schema.lancamentosManuais).set(dados).where(eq(schema.lancamentosManuais.id, id));
   else await db.insert(schema.lancamentosManuais).values({ ...dados, criadoPor: s.usuarioId });
   revalidatePath("/"); invalidarDados(); revalidatePath("/manuais"); revalidatePath("/dre");
+  return { ok: true, mensagem: id ? "Alteração salva." : `Lançamento gravado: ${dados.descricao}.` };
 }
 
 export async function excluirManual(form: FormData) {

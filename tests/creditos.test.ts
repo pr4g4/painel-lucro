@@ -57,7 +57,7 @@ describe("alerta de saldo", () => {
     const base = saldoOpenAI([L("openai", "saldo_ref", "2026-10-05T02:48:00Z", 2.5)], agora, inicioHoje);
     expect(alertaSaldo(base, { horas: 6, usd: 3 })).toMatch(/abaixo de US\$ 3/);
     const comUso = saldoOpenAI([L("openai", "saldo_ref", "2026-10-05T02:48:00Z", 10), L("openai", "uso_ia", "2026-10-05T02:50:00Z", 5)], agora, inicioHoje);
-    expect(alertaSaldo(comUso, { horas: 6, usd: 3 })).toMatch(/acaba em ~3\.0 h/); // 5 US$ restantes a 5/3 US$/h = 3 h
+    expect(alertaSaldo(comUso, { horas: 6, usd: 3 })).toMatch(/acaba em ~3,0 h/); // 5 US$ restantes a 5/3 US$/h = 3 h
     const folgado = saldoOpenAI([L("openai", "saldo_ref", "2026-10-05T02:48:00Z", 50), L("openai", "uso_ia", "2026-10-05T02:50:00Z", 0.3)], agora, inicioHoje);
     expect(alertaSaldo(folgado, { horas: 6, usd: 3 })).toBeNull();
     expect(alertaSaldo(saldoOpenAI([], agora, inicioHoje), { horas: 6, usd: 3 })).toBeNull();

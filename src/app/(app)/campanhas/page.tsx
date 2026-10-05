@@ -4,7 +4,7 @@ import { fatorImpostoMeta, numeroVigente } from "@/lib/calculo";
 import { schema, executar } from "@/db";
 import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
-import { fmtMoeda } from "@/lib/formato";
+import { fmtMoeda, fmtPctSimples } from "@/lib/formato";
 import type { Params } from "@/lib/periodo-url";
 import { desc, eq } from "drizzle-orm";
 
@@ -47,7 +47,7 @@ export default async function Campanhas({ searchParams }: { searchParams: Promis
                 <td>{l.nome}</td><td className="text-xs text-ink-2">{l.contaId === process.env.META_ACT_00 ? "00" : l.contaId === process.env.META_ACT_01 ? "01" : l.contaId}</td>
                 <td>{l.numeroWhatsapp ?? "—"}</td><td>{l.frente ?? <span className="text-ink-3">sem frente</span>}</td>
                 <td><span className={`text-xs px-1.5 py-0.5 rounded-full border border-border ${l.status === "ACTIVE" ? "text-pos" : "text-ink-3"}`}>{l.status ?? "—"}</span></td>
-                <td className="text-right num">{fmtMoeda(l.gasto, estado.moeda, taxaMxn)}</td><td className="text-right num text-ink-2">{total ? `${(l.gasto / total * 100).toFixed(1)}%` : "—"}</td>
+                <td className="text-right num">{fmtMoeda(l.gasto, estado.moeda, taxaMxn)}</td><td className="text-right num text-ink-2">{total ? fmtPctSimples(l.gasto / total) : "—"}</td>
               </tr>
             ))}
             {linhas.length === 0 && <tr><td colSpan={7} className="text-ink-3">Nenhuma campanha coletada ainda.</td></tr>}
