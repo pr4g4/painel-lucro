@@ -43,7 +43,7 @@ export function openaiClienteReal(adminKey: string): OpenAICliente {
       const u = new URL(`https://api.openai.com/v1/organization/${path}`);
       for (const [k, v] of Object.entries(params)) Array.isArray(v) ? v.forEach((x) => u.searchParams.append(k, x)) : u.searchParams.set(k, v);
       if (page) u.searchParams.set("page", page);
-      const r = await fetch(u, { headers: { Authorization: `Bearer ${adminKey}` }, cache: "no-store" });
+      const r = await fetch(u, { headers: { Authorization: `Bearer ${adminKey}` }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
       const j = await r.json();
       if (!r.ok) throw new Error(`OpenAI ${path}: ${j.error?.message ?? r.status}`);
       out.push(...j.data); page = j.has_more ? j.next_page : undefined;

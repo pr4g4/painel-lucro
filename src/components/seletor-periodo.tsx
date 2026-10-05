@@ -12,7 +12,8 @@ export function SeletorPeriodo(props: {
   rotuloPeriodo: string; rotuloAnterior: string; gran: "hora" | "dia"; granManual: boolean; podeSalvar: boolean; semRotulo?: boolean;
 }) {
   const router = useRouter(); const pathname = usePathname(); const sp = useSearchParams();
-  const [, start] = useTransition();
+  const [carregando, start] = useTransition();
+  const [alvo, setAlvo] = useState<string | null>(null); // ficha clicada (mostra "carregando")
   const [de, setDe] = useState(props.deLocal); const [ate, setAte] = useState(props.ateLocal);
   const [abrir, setAbrir] = useState(props.atalho === "personalizado");
   const [opcoes, setOpcoes] = useState(false);
@@ -21,13 +22,15 @@ export function SeletorPeriodo(props: {
     const fecha = (e: MouseEvent) => { if (popRef.current && !popRef.current.contains(e.target as Node)) setOpcoes(false); };
     document.addEventListener("click", fecha); return () => document.removeEventListener("click", fecha);
   }, []);
-  const ir = (q: string) => start(() => router.push(`${pathname}?${q}`));
+  const ir = (q: string, ficha?: string) => { if (carregando) return; /* ignora cliques repetidos enquanto carrega */ setAlvo(ficha ?? null); start(() => router.push(`${pathname}?${q}`)); };
+  useEffect(() => { if (!carregando) setAlvo(null); document.body.toggleAttribute("data-carregando", carregando); return () => document.body.removeAttribute("data-carregando"); }, [carregando]);
   const base = new URLSearchParams(sp.toString());
 
   return (
-    <div className="seletor">
+    <div className="seletor" aria-busy={carregando}>
+      {carregando && <div className="carregando-faixa" role="status">Carregando {alvo ? ROTULO_ATALHO[alvo as Atalho] ?? alvo : "período"}…</div>}
       <div className="flex gap-1.5 overflow-x-auto pb-1 -mb-1" style={{ scrollbarWidth: "none" }}>
-        {ATALHOS.map((a) => <button key={a} type="button" className="chip" data-ativo={props.atalho === a} onClick={() => ir(queryDe({ atalho: a }, base))}>{ROTULO_ATALHO[a]}</button>)}
+        {ATALHOS.map((a) => <button key={a} type="button" className="chip" data-ativo={props.atalho === a} data-carregando={alvo === a} aria-busy={alvo === a} disabled={carregando} onClick={() => ir(queryDe({ atalho: a }, base), a)}>{alvo === a && <span className="girando" aria-hidden />}{ROTULO_ATALHO[a]}</button>)}
         <button type="button" className="chip" data-ativo={props.atalho === "personalizado"} onClick={() => setAbrir((v) => !v)}>Personalizado</button>
       </div>
       {abrir && (

@@ -49,7 +49,7 @@ export async function coletarTudo(): Promise<ResultadoColeta[]> {
   const out: ResultadoColeta[] = [];
   try { const { garantirBasico } = await import("./basico"); const feito = await garantirBasico(); if (feito.length) out.push({ fonte: "basico", ok: true, registros: feito.length, detalhe: { feito } }); }
   catch (e) { out.push({ fonte: "basico", ok: false, registros: 0, erro: e instanceof Error ? e.message : String(e) }); }
-  for (const f of FONTES) out.push(await coletar(f));
+  for (const f of FONTES) { const t0 = Date.now(); const r = await coletar(f); out.push({ ...r, detalhe: { ...(r.detalhe ?? {}), duracaoMs: Date.now() - t0 } }); }
   try { const { verificarSaldos } = await import("./creditos"); await verificarSaldos(); } catch { /* alerta de saldo não derruba a coleta */ }
   try { const { processarAlertas } = await import("@/alertas/motor"); const r = await processarAlertas(); out.push({ fonte: "alertas", ok: r.erros.length === 0, registros: r.enviados.length, erro: r.erros.join(" | ") || undefined, detalhe: { provedor: r.provedor, configurado: r.configurado, faltando: r.faltando } }); } catch { /* nunca derruba a coleta */ }
   return out;

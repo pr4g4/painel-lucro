@@ -5,6 +5,7 @@
 import { and, asc, desc, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db, schema, executar } from "@/db";
 import { unstable_cache } from "next/cache";
+import { lembrar } from "@/lib/memoria";
 export const TAG_DADOS = "dados";
 import {
   calcularDRE, periodoAnterior, type Entrada, type Parametro, type Periodo, type VendaCalc, type LancamentoCalc,
@@ -114,7 +115,7 @@ export async function calcularPeriodoComAnterior(periodo: Periodo, op: OpcoesCon
 
 /** Última coleta por fonte, para o carimbo "atualizado às": uma linha por fonte, agregada no banco. */
 export type EstadoColeta = { ultimaOk: Date | null; ultima: Date; erro: string | null; falhasSeguidas: number; naoConfigurada: boolean };
-const coletasCache = unstable_cache(async () => {
+const coletasCache = unstable_cache(() => lembrar("coletas", async () => {
   const rows = await executar((d) => d.execute(sql`
     with ult_ok as (select fonte, max(coalesce(terminada_em, iniciada_em)) as ultima_ok from coletas where ok group by fonte)
     select c.fonte,
@@ -125,7 +126,7 @@ const coletasCache = unstable_cache(async () => {
     from coletas c left join ult_ok u on u.fonte = c.fonte
     group by c.fonte, u.ultima_ok`), 8000, "coletas") as unknown as { fonte: string; ultima: string | Date; ultima_ok: string | Date | null; falhas_seguidas: number; erro: string | null }[];
   return rows.map((r) => ({ fonte: r.fonte, ultima: new Date(r.ultima).toISOString(), ultimaOk: r.ultima_ok ? new Date(r.ultima_ok).toISOString() : null, erro: r.erro, falhasSeguidas: r.falhas_seguidas }));
-}, ["coletas"], { revalidate: 60, tags: [TAG_DADOS] });
+}, { ttlMs: 0, rotulo: "coletas" }), ["coletas"], { revalidate: 60, tags: [TAG_DADOS] });
 
 export async function ultimasColetas(): Promise<Map<string, EstadoColeta>> {
   const rows = await coletasCache();
@@ -147,21 +148,22 @@ type Serial<T> = T extends Date ? string : T extends (infer U)[] ? Serial<U>[] :
 const dataOuNull = (s: string | null) => (s ? new Date(s) : null);
 
 /** Leituras pesadas com cache de 60 s compartilhado (Data Cache), invalidado por `revalidateTag("dados")` em toda gravação. */
-const vendasCache = unstable_cache(async (ini: string, fim: string) => {
+const vendasCache = unstable_cache((ini: string, fim: string) => lembrar(`vendas:${ini}:${fim}`, async () => {
   const rows = await carregarVendas({ inicio: new Date(ini), fim: new Date(fim) });
   return rows.map((v) => ({ ...v, criadaEm: v.criadaEm?.toISOString() ?? null, aprovadaEm: v.aprovadaEm?.toISOString() ?? null, reembolsadaEm: v.reembolsadaEm?.toISOString() ?? null, reservaLiberadaEm: v.reservaLiberadaEm?.toISOString() ?? null }));
-}, ["vendas"], { revalidate: 60, tags: [TAG_DADOS] });
-const lancamentosCache = unstable_cache(async (ini: string, fim: string) => {
+}, { ttlMs: 0, rotulo: "vendas" }), ["vendas"], { revalidate: 60, tags: [TAG_DADOS] });
+const lancamentosCache = unstable_cache((ini: string, fim: string) => lembrar(`lancamentos:${ini}:${fim}`, async () => {
   const rows = await carregarLancamentos({ inicio: new Date(ini), fim: new Date(fim) });
   return rows.map((l) => ({ ...l, instante: l.instante.toISOString() }));
-}, ["lancamentos"], { revalidate: 60, tags: [TAG_DADOS] });
-const parametrosCache = unstable_cache(async () => (await carregarParametros()).map((p) => ({ ...p, vigenciaInicio: p.vigenciaInicio.toISOString(), vigenciaFim: p.vigenciaFim?.toISOString() ?? null })), ["parametros"], { revalidate: 60, tags: [TAG_DADOS] });
-const manuaisCache = unstable_cache(async () => (await carregarManuais()).map((m) => ({ ...m, comecaEm: m.comecaEm.toISOString(), terminaEm: m.terminaEm?.toISOString() ?? null })), ["manuais"], { revalidate: 60, tags: [TAG_DADOS] });
-const cambioCache = unstable_cache(async () => {
+}, { ttlMs: 0, rotulo: "lançamentos" }), ["lancamentos"], { revalidate: 60, tags: [TAG_DADOS] });
+const TTL_PEQUENO = 10 * 60_000; // parâmetros, categorias, manuais e câmbio: pequenos e quase não mudam
+const parametrosCache = unstable_cache(() => lembrar("parametros", async () => (await carregarParametros()).map((p) => ({ ...p, vigenciaInicio: p.vigenciaInicio.toISOString(), vigenciaFim: p.vigenciaFim?.toISOString() ?? null })), { ttlMs: TTL_PEQUENO, vazioEhErro: true, rotulo: "parâmetros" }), ["parametros"], { revalidate: 60, tags: [TAG_DADOS] });
+const manuaisCache = unstable_cache(() => lembrar("manuais", async () => (await carregarManuais()).map((m) => ({ ...m, comecaEm: m.comecaEm.toISOString(), terminaEm: m.terminaEm?.toISOString() ?? null })), { ttlMs: TTL_PEQUENO, rotulo: "lançamentos manuais" }), ["manuais"], { revalidate: 60, tags: [TAG_DADOS] });
+const cambioCache = unstable_cache(() => lembrar("cambio", async () => {
   const rows = await executar((d) => d.select().from(schema.cambio).orderBy(asc(schema.cambio.dia)), 15000, "câmbio");
   return rows.map((r) => ({ dia: r.dia, par: r.par, taxa: Number(r.taxa) }));
-}, ["cambio"], { revalidate: 60, tags: [TAG_DADOS] });
-const categoriasCache = unstable_cache(async () => executar((d) => d.select().from(schema.categorias).orderBy(asc(schema.categorias.nome)), 15000, "categorias"), ["categorias"], { revalidate: 60, tags: [TAG_DADOS] });
+}, { ttlMs: TTL_PEQUENO, rotulo: "câmbio" }), ["cambio"], { revalidate: 60, tags: [TAG_DADOS] });
+const categoriasCache = unstable_cache(() => lembrar("categorias", () => executar((d) => d.select().from(schema.categorias).orderBy(asc(schema.categorias.nome)), 15000, "categorias"), { ttlMs: TTL_PEQUENO, rotulo: "categorias" }), ["categorias"], { revalidate: 60, tags: [TAG_DADOS] });
 
 /** Versões com cache de 60 s (mesma tag "dados" invalidada em toda gravação) para as telas de cadastro: evita "dado indisponível" em instância fria. */
 export async function carregarManuaisCache(): Promise<ManualCalc[]> {
@@ -194,12 +196,13 @@ export async function montarEntradaAmpla(janelaPedida: Periodo, op: OpcoesConsul
   };
   const ini = janela.inicio.toISOString(), fim = janela.fim.toISOString();
   const [parametrosS, vendasS, lancamentosS, manuaisS, cambioS] = await Promise.all([
-    seguro(parametrosCache(), [] as Serial<Parametro>[], "parâmetros"),
+    parametrosCache().catch((e) => { console.error("[dados] parâmetros indisponíveis:", e); throw new Error("parâmetros indisponíveis: o banco demorou a responder e não há cópia na memória; tente de novo em instantes"); }),
     seguro(vendasCache(ini, fim), [] as Serial<VendaCalc>[], "vendas"),
     seguro(lancamentosCache(ini, fim), [] as Serial<LancamentoCalc>[], "lançamentos"),
     seguro(manuaisCache(), [] as Serial<ManualCalc>[], "lançamentos manuais"),
     seguro(cambioCache(), [] as { dia: string; par: string; taxa: number }[], "câmbio"),
   ]);
+  if (parametrosS.length === 0) throw new Error("parâmetros indisponíveis: a consulta voltou vazia");
   const parametros: Parametro[] = parametrosS.map((p) => ({ ...p, vigenciaInicio: new Date(p.vigenciaInicio), vigenciaFim: dataOuNull(p.vigenciaFim) }));
   const vendas: VendaCalc[] = vendasS.map((v) => ({ ...v, criadaEm: dataOuNull(v.criadaEm), aprovadaEm: dataOuNull(v.aprovadaEm), reembolsadaEm: dataOuNull(v.reembolsadaEm), reservaLiberadaEm: dataOuNull(v.reservaLiberadaEm) }));
   const lancamentos: LancamentoCalc[] = lancamentosS.map((l) => ({ ...l, instante: new Date(l.instante) }));

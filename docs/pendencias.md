@@ -66,3 +66,9 @@ Alternativa pela API do ZapData: `WHATSAPP_PROVEDOR=zapdata`, `ZAPDATA_ALERTA_UR
 - Prints de referência em `docs/prints/` (painel, DRE e campanhas; computador e celular; claro e escuro).
 - Nenhum cálculo mudou: o lucro do painel continua igual ao da DRE ao centavo (teste automático confere).
 - Conferir no iPhone real: abrir/fechar seções, botão Opções e a barra "Hoje" fixa sob o cabeçalho.
+
+## Incidente 05/10 14:53 — "Dado indisponível" ao trocar de período (corrigido)
+- Causa: a revalidação do cache de parâmetros estourou um statement_timeout de 8 s no banco (57014); o código devolvia lista vazia e o cálculo quebrava com "parâmetro sem vigência".
+- Correção: memória da instância com "último valor bom" (parâmetros, categorias, lançamentos manuais, câmbio: 10 min; vendas/lançamentos/coletas: sempre consulta, mas em erro mantém o último bom). O cache nunca guarda vazio nem erro. Rejeições em segundo plano viram log. Consultas acima de 3 s e falhas ficam no log com duração e rótulo.
+- Quem impõe os 8 s: o app não define statement_timeout. Abra `/api/diagnostico` logado: mostra `current_user` e o `statement_timeout` que a sessão do app recebe do pooler, as roles com configuração, as sessões ativas/esperando e, se a extensão `pg_stat_statements` estiver ligada (Supabase → Database → Extensions), as consultas mais lentas. Se vier 8s, é a role usada na DATABASE_URL (ou o pooler) que impõe.
+- Coleta: nenhuma etapa segura transação aberta enquanto chama API externa (só a troca de parâmetros usa transação, e sem rede dentro). Todas as chamadas externas agora têm prazo de 20 s. Cada fonte da coleta registra `duracaoMs` em `coletas.detalhe` para cruzar com os picos.

@@ -49,5 +49,8 @@ export async function avaliarAgendadorSeParado(d: DadosHoje) {
   const parado = !c || d.agora.getTime() - c.ultima.getTime() > 30 * 60_000;
   if (!parado || Date.now() - ultimaAvaliacaoAgendador < 10 * 60_000) return;
   ultimaAvaliacaoAgendador = Date.now();
-  try { const { processarAlertas } = await import("@/alertas/motor"); await processarAlertas(d.agora); } catch { /* silencioso */ }
+  try {
+    const { processarAlertas } = await import("@/alertas/motor");
+    await Promise.race([processarAlertas(d.agora), new Promise((_, rej) => setTimeout(() => rej(new Error("alertas: prazo de 20 s")), 20_000))]);
+  } catch (e) { console.warn("[alertas] avaliação a partir da página falhou:", e instanceof Error ? e.message : e); }
 }

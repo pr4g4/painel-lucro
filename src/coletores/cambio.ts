@@ -26,7 +26,7 @@ const fmtPtax = (d: string) => { const [a, m, dd] = d.split("-"); return `${m}-$
 export const clienteReal: CambioCliente = {
   async ptaxUsd(deDia, ateDia) {
     const url = `${PTAX}/CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)?@dataInicial='${fmtPtax(deDia)}'&@dataFinalCotacao='${fmtPtax(ateDia)}'&$format=json&$select=cotacaoVenda,dataHoraCotacao`;
-    const r = await fetch(url, { cache: "no-store" });
+    const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
     if (!r.ok) throw new Error(`PTAX USD HTTP ${r.status}`);
     const j = (await r.json()) as { value: { cotacaoVenda: number; dataHoraCotacao: string }[] };
     const porDia = new Map<string, number>();
@@ -34,7 +34,7 @@ export const clienteReal: CambioCliente = {
     return [...porDia.entries()].map(([dia, taxa]) => ({ dia, taxa })).sort((a, b) => a.dia.localeCompare(b.dia));
   },
   async ecbMxn(deDia, ateDia) {
-    const r = await fetch(`${FRANKFURTER}/${deDia}..${ateDia}?from=MXN&to=USD,BRL`, { cache: "no-store" });
+    const r = await fetch(`${FRANKFURTER}/${deDia}..${ateDia}?from=MXN&to=USD,BRL`, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
     if (!r.ok) throw new Error(`Frankfurter (ECB) HTTP ${r.status}`);
     const j = (await r.json()) as { rates: Record<string, { USD?: number; BRL?: number }> };
     return Object.entries(j.rates ?? {}).filter(([, v]) => typeof v.USD === "number")

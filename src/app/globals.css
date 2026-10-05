@@ -99,6 +99,15 @@ h1 { font-size: 1.25rem; letter-spacing: -0.01em; }
 .secao-corpo { padding: 0 0 16px; display: flex; flex-direction: column; gap: 16px; }
 @media (hover: hover) { .secao-cab:hover .secao-titulo { color: var(--accent); } }
 
+/* ---------- carregando ao trocar período ---------- */
+.carregando-faixa { position: fixed; left: 0; right: 0; top: 0; z-index: 60; height: 3px; background: var(--accent); color: transparent; overflow: hidden; }
+.carregando-faixa::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent); animation: brilho 1s infinite; }
+.chip[data-carregando="true"] { background: var(--surface-2); color: var(--text); border-color: var(--accent); }
+.chip:disabled { cursor: progress; }
+.girando { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 2px solid var(--text-3); border-top-color: var(--accent); border-radius: 50%; animation: girar .8s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+body[data-carregando] main { opacity: .55; transition: opacity .2s; pointer-events: none; }
+
 /* ---------- seletor de período: fichas + Opções ---------- */
 .seletor { position: relative; }
 .popover { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; width: min(320px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 32px -12px rgba(0,0,0,.35); padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; font-size: 14px; }

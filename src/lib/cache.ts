@@ -1,5 +1,7 @@
 import { revalidateTag } from "next/cache";
-/** Invalida o cache de dados; fora de uma requisição Next (testes, scripts) é um no-op. */
+import { esquecerMemoria } from "./memoria";
+/** Invalida o cache de dados (Next) e a memória da instância; fora de uma requisição Next (testes, scripts) só a memória. */
 export function invalidarDados() {
+  esquecerMemoria();
   try { revalidateTag("dados"); } catch { /* sem contexto de requisição */ }
 }

@@ -26,7 +26,7 @@ export function metaClienteReal(token: string): MetaCliente {
     const u = new URL(`${GRAPH}/${path}`);
     for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
     u.searchParams.set("access_token", token);
-    const r = await fetch(u, { cache: "no-store" });
+    const r = await fetch(u, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
     const j = await r.json();
     if (!r.ok || j.error) {
       const e = j.error ?? {};
@@ -38,7 +38,7 @@ export function metaClienteReal(token: string): MetaCliente {
     const out = [...primeira.data];
     let next = primeira.paging?.next;
     while (next) {
-      const r = await fetch(next, { cache: "no-store" });
+      const r = await fetch(next, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
       const j = (await r.json()) as { data: T[]; paging?: { next?: string } };
       out.push(...j.data); next = j.paging?.next;
     }
@@ -53,7 +53,7 @@ export function metaClienteReal(token: string): MetaCliente {
       let linhas = await paginar(sinc);
       if (linhas.length) return { linhas, granularidade: "hora", fusoConta: conta.timezone_name };
       // 2) assíncrono por hora
-      const job = await fetch(`${GRAPH}/${contaId}/insights`, { method: "POST", body: new URLSearchParams({ ...base, breakdowns: "hourly_stats_aggregated_by_advertiser_time_zone", access_token: token }) }).then((r) => r.json());
+      const job = await fetch(`${GRAPH}/${contaId}/insights`, { method: "POST", body: new URLSearchParams({ ...base, breakdowns: "hourly_stats_aggregated_by_advertiser_time_zone", access_token: token }), signal: AbortSignal.timeout(20_000) }).then((r) => r.json());
       if (job.report_run_id) {
         for (let i = 0; i < 20; i++) {
           await new Promise((r) => setTimeout(r, 1500));

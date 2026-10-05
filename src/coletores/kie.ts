@@ -16,7 +16,7 @@ export interface KieCliente { saldoCreditos(): Promise<number>; }
 export function kieClienteReal(apiKey: string): KieCliente {
   return {
     async saldoCreditos() {
-      const r = await fetch("https://api.kie.ai/api/v1/chat/credit", { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" }, cache: "no-store" });
+      const r = await fetch("https://api.kie.ai/api/v1/chat/credit", { headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
       const j = await r.json();
       if (!r.ok || j.code !== 200) throw new Error(`kie.ai: ${j.msg ?? r.status}`);
       return Number(j.data);

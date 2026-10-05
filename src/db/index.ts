@@ -57,17 +57,21 @@ export const PRAZO_PADRAO_MS = 15_000;
 export async function executar<T>(fn: (db: Db) => Promise<T>, prazoMs = PRAZO_PADRAO_MS, rotulo = "consulta"): Promise<T> {
   for (let tentativa = 1; tentativa <= 2; tentativa++) {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const t0 = Date.now();
     try {
       return await Promise.race([
         fn(atual().db),
         new Promise<T>((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error(`${rotulo}: tempo esgotado (${prazoMs / 1000} s)`), { code: "QUERY_TIMEOUT" })), prazoMs); }),
       ]);
     } catch (e) {
+      console.warn(`[db] ${rotulo} falhou após ${Date.now() - t0} ms (tentativa ${tentativa}):`, e instanceof Error ? `${e.message} ${(e as { cause?: Error }).cause?.message ?? ""}`.trim() : e);
       const recuperavel = erroDeConexao(e) || (e as { code?: string })?.code === "QUERY_TIMEOUT";
       if (tentativa === 2 || !recuperavel) throw e;
       reciclarConexao();
     } finally {
       if (timer) clearTimeout(timer);
+      const ms = Date.now() - t0;
+      if (ms > 3000) console.warn(`[db] consulta lenta: ${rotulo} levou ${ms} ms`);
     }
   }
   throw new Error("inalcançável");

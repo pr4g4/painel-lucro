@@ -13,7 +13,7 @@ export const callMeBot: Provedor = {
   async enviar(texto) {
     const fone = (process.env.WHATSAPP_ALERTA_FONE ?? "").replace(/\D/g, "");
     const url = `https://api.callmebot.com/whatsapp.php?phone=${encodeURIComponent(fone)}&text=${encodeURIComponent(texto)}&apikey=${encodeURIComponent(process.env.CALLMEBOT_APIKEY ?? "")}`;
-    const r = await fetch(url, { cache: "no-store" });
+    const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
     const corpo = await r.text();
     if (!r.ok || /error|invalid|not valid/i.test(corpo)) throw new Error(`CallMeBot HTTP ${r.status}: ${corpo.slice(0, 160)}`);
   },
@@ -25,7 +25,7 @@ export const zapData: Provedor = {
   configurado() { return this.faltando().length === 0; },
   async enviar(texto) {
     const r = await fetch(process.env.ZAPDATA_ALERTA_URL!, {
-      method: "POST", cache: "no-store",
+      method: "POST", cache: "no-store", signal: AbortSignal.timeout(20_000),
       headers: { "content-type": "application/json", ...(process.env.ZAPDATA_ALERTA_TOKEN ? { Authorization: `Bearer ${process.env.ZAPDATA_ALERTA_TOKEN}` } : {}) },
       body: JSON.stringify({ phone: (process.env.WHATSAPP_ALERTA_FONE ?? "").replace(/\D/g, ""), message: texto }),
     });
