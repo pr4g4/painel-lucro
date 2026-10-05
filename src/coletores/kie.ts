@@ -1,7 +1,10 @@
 /**
- * kie.ai: a API pública só expõe o saldo de créditos. Guardamos cada leitura (tipo `saldo_ia`) e derivamos o uso
- * como a queda de saldo entre leituras consecutivas × preço por crédito (parâmetro `kie_usd_por_credito`).
- * Saldo que sobe = recarga: não vira uso e abre aviso informativo. Chave natural: `kie|instanteLeitura`.
+ * kie.ai: a API pública só expõe o saldo de créditos (GET /api/v1/chat/credit). Não há consumo por dia nem por tarefa.
+ * Guardamos cada leitura (tipo `saldo_ia`) e derivamos o uso entre leituras consecutivas × preço por crédito (`kie_usd_por_credito`).
+ * Recarga entre duas leituras: o saldo sobe, mas parte do pacote pode já ter sido gasta. Como as recargas vêm em pacotes fixos
+ * (`kie_pacote_creditos`, 1.000 créditos = US$ 5), inferimos: pacotes = ceil(subida ÷ pacote); uso = pacotes × pacote − subida.
+ * Esse uso fica marcado `estimado` e a recarga é registrada à parte (tipo `recarga_ia`, não é custo).
+ * Limitação: uso anterior à primeira leitura (ou enquanto a coleta esteve parada) não é recuperável pela API → lançamento manual em USD, categoria IA.
  */
 import { and, desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
@@ -25,9 +28,11 @@ export async function coletarKie(cliente: KieCliente, agora = new Date()) {
   return executarColeta("kie", async () => {
     const marco = await marcoZeroAtual();
     const saldo = await cliente.saldoCreditos();
-    const params = await db.select().from(schema.parametros).where(eq(schema.parametros.chave, "kie_usd_por_credito"));
-    const precoParam = parametroVigente(params.map((p) => ({ chave: p.chave, valor: p.valor, vigenciaInicio: p.vigenciaInicio, vigenciaFim: p.vigenciaFim })), "kie_usd_por_credito", agora);
+    const params = (await db.select().from(schema.parametros)).map((p) => ({ chave: p.chave, valor: p.valor, vigenciaInicio: p.vigenciaInicio, vigenciaFim: p.vigenciaFim }));
+    const precoParam = parametroVigente(params, "kie_usd_por_credito", agora);
     const usdPorCredito = precoParam ? Number(precoParam.valor) : null;
+    const pacoteParam = parametroVigente(params, "kie_pacote_creditos", agora);
+    const pacote = pacoteParam ? Number(pacoteParam.valor) : 1000;
 
     const [anterior] = await db.select().from(schema.lancamentos).where(and(eq(schema.lancamentos.fonte, "kie"), eq(schema.lancamentos.tipo, "saldo_ia"))).orderBy(desc(schema.lancamentos.instante)).limit(1);
     const rows: NovoLancamento[] = [{
@@ -37,8 +42,22 @@ export async function coletarKie(cliente: KieCliente, agora = new Date()) {
     let uso = 0;
     if (anterior) {
       const saldoAnt = Number(anterior.valorOriginal);
-      const delta = saldoAnt - saldo;
-      if (delta < 0) await abrirAviso("recarga_detectada", "kie", `Saldo do kie.ai subiu de ${saldoAnt} para ${saldo} créditos (recarga). Não contado como uso.`);
+      let delta = saldoAnt - saldo; // créditos consumidos no intervalo
+      let estimado = false;
+      let recargaCreditos = 0;
+      if (delta < 0) {
+        // recarga no intervalo: pacotes inteiros; o que falta para fechar o pacote foi gasto
+        const subida = -delta;
+        const pacotes = Math.max(1, Math.ceil(subida / pacote));
+        recargaCreditos = pacotes * pacote;
+        delta = recargaCreditos - subida;
+        estimado = true;
+        rows.push({
+          fonte: "kie", tipo: "recarga_ia", chaveNatural: `kie|recarga|${agora.toISOString()}`, instante: agora, granularidade: "minuto",
+          descricao: `kie.ai recarga inferida: ${pacotes} pacote(s) de ${pacote} créditos (saldo ${saldoAnt} → ${saldo})`,
+          valorOriginal: String(recargaCreditos), moeda: "CRED", valorBrl: "0", taxaCambio: "0", historico: agora < marco, estimado: true, payload: { saldoAnt, saldo, pacotes, pacote },
+        });
+      }
       if (delta > 0) {
         if (usdPorCredito == null) await abrirAviso("parametro_faltando", "kie", "Parâmetro kie_usd_por_credito não cadastrado: uso do kie.ai fica como 'dado indisponível'.");
         else {
@@ -50,8 +69,8 @@ export async function coletarKie(cliente: KieCliente, agora = new Date()) {
             // o uso é atribuído ao intervalo [anterior, agora); gravamos no início do intervalo
             rows.push({
               fonte: "kie", tipo: "uso_ia", chaveNatural: `kie|uso|${anterior.instante.toISOString()}`, instante: anterior.instante, granularidade: "intervalo",
-              descricao: `kie.ai uso (${delta} créditos)`, valorOriginal: String(usd), moeda: "USD", valorBrl: String(usd * cambio.taxa), taxaCambio: String(cambio.taxa),
-              historico: anterior.instante < marco, payload: { creditos: delta, de: anterior.instante, ate: agora },
+              descricao: `kie.ai uso (${delta} créditos${estimado ? `, inferido com recarga de ${recargaCreditos}` : ""})`, valorOriginal: String(usd), moeda: "USD", valorBrl: String(usd * cambio.taxa), taxaCambio: String(cambio.taxa),
+              historico: anterior.instante < marco, estimado, payload: { creditos: delta, de: anterior.instante, ate: agora, recargaCreditos },
             });
           }
         }

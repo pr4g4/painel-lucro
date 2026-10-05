@@ -49,4 +49,5 @@ export const PARAMETROS_PADRAO: Record<string, { valor: string; observacao: stri
   reserva_zenith_pct: { valor: "10", observacao: "Reserva retida pela Zenith, em % do bruto (conferido: 10%). Não é custo; usada quando a fonte não informa o valor." },
   imposto_lucro_pct: { valor: "8", observacao: "Imposto sobre o lucro do período. Se a base for negativa, 0." },
   imposto_lucro_base: { valor: "a", observacao: "a = lucro bruto; b = receita líquida; c = receita líquida − Meta com imposto." },
+  kie_pacote_creditos: { valor: "1000", observacao: "Tamanho do pacote de recarga do kie.ai (1.000 créditos = US$ 5). Usado para inferir uso quando há recarga entre duas leituras." },
 };
