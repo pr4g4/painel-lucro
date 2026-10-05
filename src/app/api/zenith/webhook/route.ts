@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db, schema, executar } from "@/db";
-import { lerCabecalhos, verificarAssinatura, interpretarEvento, type EventoZenith } from "@/coletores/zenith-webhook";
-import { normalizarVenda, acharVendaZenith } from "@/coletores/zenith";
+import { lerCabecalhos, verificarAssinatura, type EventoZenith } from "@/coletores/zenith-webhook";
+import { aplicarEvento } from "@/coletores/zenith-aplicar";
 import { abrirAviso } from "@/coletores/base";
 
 export const dynamic = "force-dynamic";
@@ -47,46 +47,15 @@ export async function POST(req: NextRequest) {
   if (inserido.length === 0) return NextResponse.json({ ok: true, duplicado: true });
   const linhaId = inserido[0].id;
 
-  // 2) interpreta e aplica
+  // 2) interpreta e aplica (mesma lógica do reprocessamento)
   let resultado = "";
   let vendaIdOrigem: string | null = null;
   try {
-    const r = interpretarEvento(ev, h.eventType, h.timestamp, eventoId);
-    if (!r.ok) {
-      resultado = `ignorado: ${r.motivo}`;
-      if (r.desconhecido) await abrirAviso("formato_desconhecido", "zenith", `Webhook da Zenith com formato desconhecido (evento ${eventoId}): ${r.motivo}. Payload guardado em zenith_eventos.`);
-    } else {
-      vendaIdOrigem = r.identidade;
-      const nova = await normalizarVenda(r.venda, "zenith");
-      const existente = await acharVendaZenith([r.identidade, ...(r.venda.ids ?? [])]);
-      if (!existente) {
-        if (nova.status === "reembolsada" || nova.status === "chargeback") {
-          // reembolso de venda que nunca entrou (anterior ao acompanhamento): guarda como histórico e avisa, sem subtrair receita
-          nova.historico = true;
-          await abrirAviso("reembolso_sem_venda", "zenith", `Reembolso/chargeback de venda desconhecida (${r.identidade}); guardado como histórico, fora dos totais.`);
-        }
-        await executar((d) => d.insert(schema.vendas).values(nova));
-        resultado = `venda ${r.identidade} criada: ${nova.status} (${r.descricao})`;
-      } else if (nova.status === "aprovada") {
-        if (existente.status === "pendente") {
-          // pendente → aprovada: entra na receita na hora da aprovação
-          await executar((d) => d.update(schema.vendas).set({ status: "aprovada", aprovadaEm: nova.aprovadaEm, brutoOriginal: nova.brutoOriginal, taxaCambio: nova.taxaCambio, brutoBrl: nova.brutoBrl, taxaPctBrl: nova.taxaPctBrl, taxaFixaBrl: nova.taxaFixaBrl, cambioPctBrl: nova.cambioPctBrl, liquidoBrl: nova.liquidoBrl, reservaBrl: nova.reservaBrl, historico: nova.historico, payload: nova.payload, coletadoEm: new Date() }).where(eq(schema.vendas.id, existente.id)));
-          resultado = `venda ${r.identidade} aprovada (era pendente) via ${r.descricao}`;
-        } else {
-          // já aprovada/reembolsada: segundo evento de aprovação da mesma venda → não soma de novo
-          resultado = `venda ${r.identidade} já registrada (${existente.status}); ${r.descricao} não somou de novo`;
-        }
-      } else if (nova.status === "pendente") {
-        resultado = `venda ${r.identidade} já ${existente.status}; pending ignorado`;
-      } else {
-        // reembolso/chargeback de venda conhecida: muda status e data do reembolso (receita original fica; linha negativa na data do reembolso)
-        await executar((d) => d.update(schema.vendas).set({ status: nova.status, reembolsadaEm: nova.reembolsadaEm, coletadoEm: new Date() }).where(eq(schema.vendas.id, existente.id)));
-        resultado = `venda ${r.identidade} marcada ${nova.status} em ${nova.reembolsadaEm?.toISOString()}`;
-      }
-    }
+    const r = await aplicarEvento(ev, h.eventType, h.timestamp, eventoId);
+    resultado = r.resultado; vendaIdOrigem = r.vendaIdOrigem;
   } catch (e) {
     resultado = `erro: ${e instanceof Error ? e.message : String(e)}`;
-    await abrirAviso("coleta_falhou", "zenith", `Webhook da Zenith (evento ${eventoId}) falhou ao aplicar: ${resultado}`);
+    await abrirAviso("coleta_falhou", "zenith", `Webhook da Zenith (evento ${eventoId}) falhou ao aplicar: ${resultado}. Será reprocessado automaticamente na próxima coleta de câmbio.`);
   }
   await executar((d) => d.update(schema.zenithEventos).set({ processado: !resultado.startsWith("erro"), resultado, vendaIdOrigem }).where(eq(schema.zenithEventos.id, linhaId)));
   await executar((d) => d.insert(schema.coletas).values({ fonte: "zenith", terminadaEm: new Date(), ok: !resultado.startsWith("erro"), registros: 1, detalhe: { eventoId, resultado } }));

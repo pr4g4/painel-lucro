@@ -41,10 +41,16 @@ export const ptaxCliente: CambioCliente = {
 export async function coletarCambio(cliente: CambioCliente = ptaxCliente, agora = new Date()) {
   return executarColeta("cambio", async () => {
     const hoje = diaBrasilia(agora);
-    const de = diaBrasilia(new Date(agora.getTime() - 10 * 86_400_000));
     let gravados = 0;
+    const detalhe: Record<string, unknown> = {};
     for (const par of ["USDBRL", "MXNBRL"] as const) {
+      // Janela normal: 15 dias. Se ainda não houver NENHUMA taxa deste par (ex.: primeira coleta num fim de semana), busca 45 dias
+      // para garantir pelo menos um dia útil, pois a leitura usa "última taxa até a data".
+      const [existe] = await db.select({ dia: schema.cambio.dia }).from(schema.cambio).where(eq(schema.cambio.par, par)).limit(1);
+      const dias = existe ? 15 : 45;
+      const de = diaBrasilia(new Date(agora.getTime() - dias * 86_400_000));
       const cot = await cliente.cotacoes(par, de, hoje);
+      detalhe[par] = { janelaDias: dias, recebidas: cot.length, ultima: cot[cot.length - 1]?.dia ?? null };
       for (const c of cot) {
         await db.insert(schema.cambio).values({ dia: c.dia, par, taxa: String(c.taxa), fonte: "ptax", provisoria: false })
           .onConflictDoUpdate({ target: [schema.cambio.dia, schema.cambio.par], set: { taxa: String(c.taxa), provisoria: false, fonte: "ptax", coletadoEm: new Date() } });
@@ -57,7 +63,13 @@ export async function coletarCambio(cliente: CambioCliente = ptaxCliente, agora 
         if (!existe) await db.insert(schema.cambio).values({ dia: hoje, par, taxa: String(ultima.taxa), fonte: "ptax", provisoria: true });
       }
     }
-    return { registros: gravados };
+    // Vendas da Zenith que falharam por falta de câmbio entram agora
+    try {
+      const { reprocessarEventosZenith } = await import("./zenith-aplicar");
+      const r = await reprocessarEventosZenith();
+      if (r.tentados) detalhe.zenithReprocessados = { ok: r.ok, aindaComErro: r.aindaComErro };
+    } catch (e) { detalhe.zenithReprocessamento = `falhou: ${e instanceof Error ? e.message : e}`; }
+    return { registros: gravados, detalhe };
   });
 }
 

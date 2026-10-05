@@ -3,7 +3,7 @@ import { getIronSession } from "iron-session";
 import { SESSAO_OPCOES, type Sessao } from "@/lib/auth/sessao";
 
 // Rotas públicas: login, webhook da Zenith e rotas de coleta (protegidas por CRON_SECRET)
-const PUBLICAS = [/^\/login$/, /^\/api\/coleta(\/|$)/, /^\/api\/zenith\/webhook$/, /^\/api\/saude$/, /^\/api\/seed$/, /^\/api\/resumo$/];
+const PUBLICAS = [/^\/login$/, /^\/api\/coleta(\/|$)/, /^\/api\/zenith\/webhook$/, /^\/api\/saude$/, /^\/api\/seed$/, /^\/api\/resumo$/, /^\/api\/zenith\/reprocessar$/];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

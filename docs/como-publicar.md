@@ -63,6 +63,7 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
   3. Vercel → Settings → Environment Variables → `ZENITH_WEBHOOK_SECRET` = esse segredo → Redeploy.
   4. Teste: faça uma venda de teste (ou use "enviar evento de teste" na Zenith) e veja em **Lançamentos** (fonte Zenith) e em **Avisos**. Todo evento recebido fica guardado na tabela `zenith_eventos` (Supabase → Table Editor) para auditoria.
   5. Vendas anteriores ao webhook: Zenith → Vendas → Conciliação em CSV → Baixar CSV → app → **Importar CSV**.
+  6. Se algum evento do webhook falhar por falta de câmbio (fim de semana sem PTAX), ele é reprocessado sozinho na próxima coleta de câmbio (a cada 10 min). Para forçar agora e ver os números, abra logado: `https://SEU-SITE.vercel.app/api/zenith/reprocessar?cambio=1` (mostra quantas taxas PTAX há por moeda, a data da última e o que foi reprocessado).
   Regra: a mesma venda pode chegar como `deposit.credited` e também `payment.captured`/`checkout.succeeded`; o app conta a receita **uma vez por `referenceId`** (sem referenceId, por `data.id`). Reembolso entra como linha negativa na data do reembolso. Reserva retida = 10% do bruto (parâmetro).
 
 ## Se algo der errado

@@ -5,7 +5,7 @@
  */
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
-import { executarColeta, upsertLancamentos, marcoZeroAtual, type NovoLancamento } from "./base";
+import { executarColeta, upsertLancamentos, marcoZeroAtual, abrirAviso, resolverAvisos, type NovoLancamento } from "./base";
 import { fromZonedTime } from "date-fns-tz";
 
 export type MetaLinha = {
@@ -28,7 +28,10 @@ export function metaClienteReal(token: string): MetaCliente {
     u.searchParams.set("access_token", token);
     const r = await fetch(u, { cache: "no-store" });
     const j = await r.json();
-    if (!r.ok || j.error) throw new Error(`Meta ${path}: ${j.error?.message ?? r.status}`);
+    if (!r.ok || j.error) {
+      const e = j.error ?? {};
+      throw new Error(`Meta ${path}: ${e.message ?? r.status} [code ${e.code ?? "?"}${e.error_subcode ? `, subcode ${e.error_subcode}` : ""}${e.type ? `, ${e.type}` : ""}${e.error_user_title ? `; ${e.error_user_title}: ${e.error_user_msg ?? ""}` : ""}${e.fbtrace_id ? `; fbtrace ${e.fbtrace_id}` : ""}]`);
+    }
     return j as T;
   }
   async function paginar<T>(primeira: { data: T[]; paging?: { next?: string } }): Promise<T[]> {
@@ -91,7 +94,9 @@ export async function coletarMeta(cliente: MetaCliente, contas: string[], agora 
     const frentes = await db.select({ id: schema.frentes.id, regraCampanha: schema.frentes.regraCampanha }).from(schema.frentes).orderBy(schema.frentes.ordem);
     const detalhe: Record<string, unknown> = {};
     let total = 0;
+    const errosPorConta: string[] = [];
     for (const contaId of contas) {
+      try {
       const de = new Date(agora.getTime() - horasRetro * 3_600_000);
       // período em dias no fuso da conta: pedimos um dia a mais para cobrir a virada
       const { linhas, granularidade, fusoConta } = await cliente.insights(contaId, diaNoFuso(new Date(de.getTime() - 86_400_000), "America/Sao_Paulo"), diaNoFuso(agora, "America/Sao_Paulo"));
@@ -118,7 +123,15 @@ export async function coletarMeta(cliente: MetaCliente, contas: string[], agora 
         });
       }
       total += await upsertLancamentos(rows);
+      } catch (e) {
+        // uma conta bloqueada não impede a outra; o erro completo vai para o aviso
+        const msg = e instanceof Error ? e.message : String(e);
+        errosPorConta.push(`${contaId}: ${msg}`); detalhe[contaId] = { erro: msg };
+      }
     }
+    if (errosPorConta.length === contas.length) throw new Error(errosPorConta.join(" | "));
+    if (errosPorConta.length) await abrirAviso("coleta_parcial", "meta", `Meta: ${errosPorConta.join(" | ")}`);
+    else await resolverAvisos("meta", "coleta_parcial");
     return { registros: total, detalhe };
   });
 }
