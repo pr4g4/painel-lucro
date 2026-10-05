@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import type { LinhaDRE } from "@/lib/calculo";
-import { fmtMoeda, fmtPct, fmtPctSimples } from "@/lib/formato";
+import { fmtMoeda, fmtMXN, fmtPct, fmtPctSimples } from "@/lib/formato";
 
 export type ColunaDRE = { chave: string; rotulo: string; linhas: LinhaDRE[]; receitaLiquida: number };
 
@@ -84,7 +84,7 @@ export function TabelaDRE(props: { atual: ColunaDRE; anterior: ColunaDRE; temBas
                     {nivel === 0 && temFilhos ? <button type="button" className="mr-1 text-ink-3" onClick={() => setAbertas({ ...abertas, [l.chave]: !aberta })} aria-label="expandir">{aberta ? "▾" : "▸"}</button> : nivel === 0 ? <span className="mr-1 inline-block w-3" /> : null}
                     {li.rotulo}
                     {li.extra?.qtd != null && <span className="text-ink-3 text-xs ml-1">({String(li.extra.qtd)})</span>}
-                    {li.extra?.mxn != null && <span className="text-ink-3 text-xs ml-1">MX$ {Number(li.extra.mxn).toFixed(2)}</span>}
+                    {li.extra?.mxn != null && <span className="text-ink-3 text-xs ml-1">{fmtMXN(Number(li.extra.mxn))}</span>}
                   </td>
                   {colunas.map((c) => {
                     const x = achar(c.linhas, li.chave);

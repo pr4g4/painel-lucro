@@ -15,7 +15,7 @@ export default async function Resumo({ searchParams }: { searchParams: Promise<P
   const { estado, coletas, taxaMxn } = ctx;
   const hojeP = resolverAtalho("hoje", estado.agora, estado.marcoZero, estado.tz).periodo;
   const hoje = ctx.calc(hojeP), hojeAnt = ctx.calc(periodoAnterior(hojeP, estado.tz));
-  const mes = ctx.atual;
+  const mes = ctx.calc({ inicio: new Date(Math.max(estado.periodo.inicio.getTime(), estado.marcoZero.getTime())), fim: estado.periodo.fim }); // mês atual desde o marco zero
   const m = { moeda: estado.moeda, taxaMxn };
   const f = faltaParaEmpatar(hoje);
   const proj = projecaoMes(mes, estado.agora, estado.tz, estado.marcoZero);
@@ -26,8 +26,8 @@ export default async function Resumo({ searchParams }: { searchParams: Promise<P
       <CartoesCreditos tz={estado.tz} agora={estado.agora} edita={ctx.sessao.papel === "edita"} />
       <Cartao rotulo="Lucro líquido hoje" valor={hoje.totais.lucroLiquido} anterior={hojeAnt.totais.lucroLiquido} temBase={ctx.temDados(periodoAnterior(hojeP, estado.tz))} hero {...m} />
       <div className="grid grid-cols-2 gap-2">
-        <Cartao rotulo="Metade para cada sócio (hoje)" valor={hoje.totais.porSocio} temBase={false} destaque {...m} />
-        <Cartao rotulo="Lucro líquido no mês" valor={mes.totais.lucroLiquido} temBase={false} destaque {...m} />
+        <Cartao rotulo="Metade para cada sócio (hoje)" valor={hoje.totais.porSocio} anterior={hojeAnt.totais.porSocio} temBase={ctx.temDados(periodoAnterior(hojeP, estado.tz))} destaque {...m} />
+        <Cartao rotulo="Lucro líquido no mês (desde o marco zero)" valor={mes.totais.lucroLiquido} temBase={false} destaque {...m} />
         <Cartao rotulo="Vendas hoje" valor={hoje.totais.numVendas} formato="int" temBase={false} />
         <Cartao rotulo="Receita líquida hoje" valor={hoje.totais.receitaLiquida} temBase={false} {...m} />
         <Cartao rotulo="Meta com imposto hoje" valor={hoje.totais.metaComImposto} temBase={false} {...m} />

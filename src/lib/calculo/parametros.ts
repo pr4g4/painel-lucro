@@ -51,5 +51,8 @@ export const PARAMETROS_PADRAO: Record<string, { valor: string; observacao: stri
   imposto_lucro_base: { valor: "a", observacao: "a = lucro bruto; b = receita líquida; c = receita líquida − Meta com imposto." },
   alerta_saldo_horas: { valor: "6", observacao: "Aviso quando o saldo de uma IA durar menos que N horas no ritmo das últimas 3 h." },
   alerta_saldo_usd: { valor: "3", observacao: "Aviso quando o saldo de uma IA ficar abaixo de US$ N." },
+  pendente_expira_oxxo_h: { valor: "72", observacao: "Checkout OXXO pendente some da lista após N horas sem pagamento." },
+  pendente_expira_spei_h: { valor: "24", observacao: "Checkout SPEI pendente some da lista após N horas sem pagamento." },
+  pendente_expira_outros_h: { valor: "48", observacao: "Outros métodos: pendente some após N horas." },
   kie_pacote_creditos: { valor: "1000", observacao: "Tamanho do pacote de recarga do kie.ai (1.000 créditos = US$ 5). Usado para inferir uso quando há recarga entre duas leituras." },
 };

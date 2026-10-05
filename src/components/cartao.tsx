@@ -19,7 +19,7 @@ export function Cartao(props: {
       <div className={`text-xs num ${props.hero ? "sub" : "text-ink-3"}`}>
         {props.indisponivel ? <span className="text-warn">dado indisponível: {props.indisponivel}</span> : v.abs == null ? "sem base de comparação" : (
           <span className={bom ? "pos" : "neg"}>
-            {formato === "moeda" ? `${v.abs >= 0 ? "+" : ""}${fmtMoeda(v.abs, moeda, taxaMxn)}` : formato === "pct" ? `${v.abs >= 0 ? "+" : ""}${(v.abs * 100).toFixed(1)} p.p.` : `${v.abs >= 0 ? "+" : ""}${formato === "int" ? v.abs : v.abs.toFixed(2)}`}
+            {formato === "moeda" ? `${v.abs >= 0 ? "+" : ""}${fmtMoeda(v.abs, moeda, taxaMxn)}` : formato === "pct" ? `${v.abs >= 0 ? "+" : ""}${(v.abs * 100).toFixed(1)} p.p.` : `${v.abs >= 0 ? "+" : ""}${formato === "int" ? v.abs : new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v.abs)}`}
             {v.pct != null && ` (${fmtPct(v.pct)})`}
             <span className={props.hero ? "" : "text-ink-3"}> vs. anterior</span>
           </span>

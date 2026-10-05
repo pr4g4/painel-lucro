@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { invalidarDados } from "@/lib/cache";
 import { eq } from "drizzle-orm";
 import { db, schema, executar } from "@/db";
 import { lerCabecalhos, verificarAssinatura, type EventoZenith } from "@/coletores/zenith-webhook";
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
   }
   await executar((d) => d.update(schema.zenithEventos).set({ processado: !resultado.startsWith("erro"), resultado, vendaIdOrigem }).where(eq(schema.zenithEventos.id, linhaId)));
   await executar((d) => d.insert(schema.coletas).values({ fonte: "zenith", terminadaEm: new Date(), ok: !resultado.startsWith("erro"), registros: 1, detalhe: { eventoId, resultado } }));
+  invalidarDados();
   return NextResponse.json({ ok: true, resultado });
 }
 

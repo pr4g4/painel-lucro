@@ -9,7 +9,7 @@ import { BotaoAtualizar } from "@/components/atualizar";
 import { VisoesSalvas } from "@/components/visoes";
 import { BlocoOperacao } from "@/components/operacao";
 import { CartoesCreditos } from "@/components/creditos";
-import { fmtHora, fmtMoeda } from "@/lib/formato";
+import { fmtHora, fmtMoeda, fmtMXN } from "@/lib/formato";
 import { ROTULO_FONTE } from "@/coletores";
 import { ultimaTaxaMxnInfo, ROTULO_FONTE_CAMBIO } from "@/coletores/cambio";
 import type { Params } from "@/lib/periodo-url";
@@ -26,7 +26,8 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   const hoje = { atual: ctx.calc(hojeP), anterior: ctx.calc(hojeAnt), temBaseAnterior: ctx.temDados(hojeAnt) };
   const fatias = dreFatiada(ctx.entrada, estado.periodo, estado.gran, estado.tz);
   const taxaMxnInfo = await ultimaTaxaMxnInfo().catch(() => null);
-  const mesP = resolverAtalho("mes_atual", estado.agora, estado.marcoZero, estado.tz).periodo;
+  const mesBruto = resolverAtalho("mes_atual", estado.agora, estado.marcoZero, estado.tz).periodo;
+  const mesP = { inicio: new Date(Math.max(mesBruto.inicio.getTime(), estado.marcoZero.getTime())), fim: mesBruto.fim }; // mesma base do "desde o marco zero"
   const mes = ctx.calc(mesP);
 
   const dadosGrafico = fatias.map((f) => ({ rotulo: f.rotulo, receita: f.dre.totais.receitaLiquida, meta: f.dre.totais.metaComImposto, zapdata: f.dre.totais.zapdata, ia: f.dre.totais.ia, operacao: f.dre.totais.operacao, lucro: f.dre.totais.lucroLiquido }));
@@ -60,7 +61,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
         <Cartao rotulo="Reserva retida na Zenith (só venda nova)" valor={atual.totais.reservaRetida} temBase={false} moeda={estado.moeda} taxaMxn={taxaMxn} nota="não é custo" />
         <Cartao rotulo={`Vendas pendentes (${atual.totais.pendentesQtd})`} valor={atual.totais.pendentesValor} temBase={false} moeda={estado.moeda} taxaMxn={taxaMxn} nota="fora da receita" />
         <Cartao rotulo="Ponto de equilíbrio (falta de receita líq.)" valor={atual.indicadores.pontoEquilibrio} temBase={false} moeda={estado.moeda} taxaMxn={taxaMxn} />
-        <Cartao rotulo="Receita bruta em MX$" texto={new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(atual.totais.receitaBrutaMxn)} valor={atual.totais.receitaBrutaMxn} anterior={anterior.totais.receitaBrutaMxn} temBase={temBaseAnterior} formato="texto" />
+        <Cartao rotulo="Receita bruta em MX$" texto={fmtMXN(atual.totais.receitaBrutaMxn)} valor={atual.totais.receitaBrutaMxn} anterior={anterior.totais.receitaBrutaMxn} temBase={temBaseAnterior} formato="texto" />
       </div>
 
       <Grafico dados={dadosGrafico} titulo={`Receita líquida × custos empilhados + lucro líquido (por ${estado.gran})`} />

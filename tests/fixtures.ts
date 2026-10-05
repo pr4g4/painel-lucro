@@ -16,7 +16,7 @@ export const TAXA_USD = 5.40; // USD→BRL de exemplo
 
 let seq = 0;
 /** Venda estilo Zenith: bruto MXN → deduções 7,99% + MX$5 + 2% → líquido; reserva 10% do líquido (retida). */
-export function vendaZenith(o: { brutoMxn: number; aprovadaEm: Date; status?: VendaCalc["status"]; reembolsadaEm?: Date | null; produto?: string | null; historico?: boolean; taxa?: number }): VendaCalc {
+export function vendaZenith(o: { brutoMxn: number; aprovadaEm: Date; status?: VendaCalc["status"]; reembolsadaEm?: Date | null; produto?: string | null; historico?: boolean; taxa?: number; metodo?: string | null }): VendaCalc {
   const taxa = o.taxa ?? TAXA_MXN;
   const brutoBrl = o.brutoMxn * taxa;
   const taxaPctBrl = brutoBrl * 0.0799;
@@ -28,7 +28,7 @@ export function vendaZenith(o: { brutoMxn: number; aprovadaEm: Date; status?: Ve
     criadaEm: o.aprovadaEm, aprovadaEm: o.status === "pendente" ? null : o.aprovadaEm, reembolsadaEm: o.reembolsadaEm ?? null,
     produto: o.produto ?? null, moeda: "MXN", brutoOriginal: o.brutoMxn, taxaCambio: taxa, brutoBrl,
     taxaPctBrl, taxaFixaBrl, cambioPctBrl, liquidoBrl, reservaBrl: liquidoBrl * 0.10, reservaLiberadaEm: null,
-    historico: o.historico ?? false,
+    historico: o.historico ?? false, metodo: o.metodo ?? null,
   };
 }
 

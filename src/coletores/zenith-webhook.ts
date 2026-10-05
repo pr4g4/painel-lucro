@@ -116,7 +116,12 @@ export function interpretarEvento(ev: EventoZenith, tipoHeader: string | null, t
   const quando = tsParaDate(g(d, "createdAt", "created_at", "capturedAt", "creditedAt", "paidAt", "occurredAt") as string | number | undefined)
     ?? tsParaDate(timestampHeader ?? undefined) ?? new Date();
   const bruto = Number.isFinite(amount) ? amount / 100 : 0; // centavos → unidades
-  const produto = (g(d, "productName", "product", "description", "concept") as string | undefined) ?? null;
+  const produtoRaw = g(d, "productName", "product_name", "infoproduct", "infoproductName", "checkoutName", "description", "concept", "title")
+    ?? (d.product as { name?: string; title?: string } | undefined)?.name ?? (d.product as { title?: string } | undefined)?.title
+    ?? (d.checkout as { name?: string; title?: string } | undefined)?.name ?? (d.checkout as { title?: string } | undefined)?.title
+    ?? (Array.isArray(d.items) ? (d.items[0] as { name?: string; title?: string } | undefined)?.name ?? (d.items[0] as { title?: string } | undefined)?.title : undefined)
+    ?? (d.metadata as { product?: string; plan?: string } | undefined)?.product ?? (d.metadata as { plan?: string } | undefined)?.plan;
+  const produto = typeof produtoRaw === "string" && produtoRaw.trim() ? produtoRaw.trim() : null;
   const metodo = String(g(d, "paymentMethod", "method") ?? (tipo === "deposit.credited" ? "spei" : ""));
   const familia = tipo === "deposit.credited" ? "deposito" : "pagamento";
   const base = { id: identidade, moeda: moeda as "MXN" | "BRL", bruto, produto, ids: candidatos, payload: { eventoId: eventId, tipo, familia, metodo, data: d } };

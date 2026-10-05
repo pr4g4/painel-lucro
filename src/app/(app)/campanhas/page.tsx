@@ -6,7 +6,7 @@ import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
 import { fmtMoeda } from "@/lib/formato";
 import type { Params } from "@/lib/periodo-url";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,7 @@ export default async function Campanhas({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const ctx = await contextoPeriodo(sp);
   const { estado, taxaMxn } = ctx;
+  const ultimaMeta = await executar((d) => d.select().from(schema.coletas).where(eq(schema.coletas.fonte, "meta")).orderBy(desc(schema.coletas.iniciadaEm)).limit(1), 10000, "última coleta Meta").then((r) => r[0]).catch(() => undefined);
   const [lanc, params, camps] = await Promise.all([carregarLancamentos(estado.periodo), carregarParametros(),
     executar((d) => d.select({ c: schema.campanhas, frente: schema.frentes.nome }).from(schema.campanhas).leftJoin(schema.frentes, eq(schema.frentes.id, schema.campanhas.frenteId)), 15000, "campanhas")]);
   const gasto = new Map<string, number>();
@@ -28,6 +29,15 @@ export default async function Campanhas({ searchParams }: { searchParams: Promis
     <>
       <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Campanhas <span className="text-xs text-ink-3 font-normal">gasto com imposto no período · total {fmtMoeda(total, estado.moeda, taxaMxn)} · sem ROAS por campanha na fase 1</span></h1>
+      {ultimaMeta && (
+        <div className="card p-3 text-xs text-ink-2">
+          <b>Última coleta Meta</b> {ultimaMeta.iniciadaEm.toISOString().slice(11, 16)} UTC · {ultimaMeta.ok ? "ok" : `falhou: ${ultimaMeta.erro}`} ·{" "}
+          {Object.entries((ultimaMeta.detalhe as Record<string, { linhas?: number; granularidade?: string; erro?: string }>) ?? {}).map(([conta, d]) => (
+            <span key={conta} className="mr-3">{conta === process.env.META_ACT_00 ? "conta 00" : conta === process.env.META_ACT_01 ? "conta 01" : conta}: {d.erro ? <span className="neg">erro {d.erro}</span> : `${d.linhas ?? 0} linha(s) ${d.granularidade ?? ""}`}</span>
+          ))}
+          <span className="text-ink-3">(0 linhas sem erro = a Meta não retornou gasto nessa conta no período: campanhas pausadas ou sem veiculação)</span>
+        </div>
+      )}
       <div className="card overflow-x-auto">
         <table className="tab">
           <thead><tr><th>Campanha</th><th>Conta</th><th>Número</th><th>Frente</th><th>Status</th><th className="text-right">Gasto c/ imposto</th><th className="text-right">% do total</th></tr></thead>

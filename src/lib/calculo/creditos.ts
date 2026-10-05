@@ -26,9 +26,25 @@ export type SaldoIA = {
 const soma = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const H = 3_600_000;
 
+/** Um lançamento de uso cobre [instante, instante + duração): hora (OpenAI), ou o intervalo entre leituras (kie, gravado no payload? não) → tratamos "intervalo" como 10 min. */
+function duracaoMs(x: LancamentoCalc): number {
+  return x.granularidade === "hora" ? H : x.granularidade === "dia" ? 24 * H : x.granularidade === "intervalo" ? 10 * 60_000 : 0;
+}
+/** Soma do uso dentro de [de, ate), rateando os lançamentos que atravessam a borda pela fração sobreposta. */
+export function usoEntre(uso: LancamentoCalc[], de: Date, ate: Date): number {
+  let total = 0;
+  for (const x of uso) {
+    const ini = x.instante.getTime(), dur = duracaoMs(x), fim = ini + Math.max(dur, 1);
+    const sobre = Math.min(fim, ate.getTime()) - Math.max(ini, de.getTime());
+    if (sobre <= 0) continue;
+    total += dur === 0 ? x.valorOriginal : x.valorOriginal * (sobre / dur);
+  }
+  return total;
+}
+
 function consumo(l: LancamentoCalc[], fonte: string, agora: Date, inicioHoje: Date) {
   const uso = l.filter((x) => x.fonte === fonte && x.tipo === "uso_ia");
-  const em = (de: Date, ate: Date) => soma(uso.filter((x) => x.instante >= de && x.instante < ate).map((x) => x.valorOriginal));
+  const em = (de: Date, ate: Date) => usoEntre(uso, de, ate);
   const usoUltimaHoraUsd = em(new Date(agora.getTime() - H), agora);
   const uso3h = em(new Date(agora.getTime() - 3 * H), agora);
   const usoHojeUsd = em(inicioHoje, agora);
@@ -54,7 +70,7 @@ export function saldoOpenAI(l: LancamentoCalc[], agora: Date, inicioHoje: Date):
   if (!refs.length) return { ...base, indisponivel: "sem saldo de referência: registre 'saldo conferido' no cartão" };
   const ref = refs[0];
   const recargasDepois = soma(l.filter((x) => x.fonte === "openai" && x.tipo === "recarga_ia" && x.instante > ref.instante && x.instante <= agora).map((x) => x.valorOriginal));
-  const custoDepois = soma(l.filter((x) => x.fonte === "openai" && x.tipo === "uso_ia" && x.instante >= ref.instante && x.instante < agora).map((x) => x.valorOriginal));
+  const custoDepois = usoEntre(l.filter((x) => x.fonte === "openai" && x.tipo === "uso_ia"), ref.instante, agora);
   const saldo = ref.valorOriginal + recargasDepois - custoDepois;
   const horas = c.ritmoUsdPorHora > 0 ? Math.max(0, saldo) / c.ritmoUsdPorHora : null;
   return { ...base, saldoUsd: saldo, lidoEm: ref.instante, horasRestantes: horas, referencia: { valorUsd: ref.valorOriginal, em: ref.instante, recargasDepoisUsd: recargasDepois, custoDepoisUsd: custoDepois } };

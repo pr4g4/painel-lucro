@@ -24,7 +24,7 @@ export function BlocoOperacao(props: {
           <div className="text-xs text-ink-3">{f.faltaReceita === 0 ? `lucro bruto de ${money(hoje.totais.lucroBruto)}` : f.vendasNecessarias != null ? `≈ ${f.vendasNecessarias} venda(s) no ticket médio de hoje (${money(hoje.indicadores.ticketMedioLiquido ?? 0)})` : <span className="text-warn">nº de vendas indisponível: {f.motivo}</span>}</div>
         </div>
         <div className="card p-3 md:p-4">
-          <div className="rotulo">Projeção de lucro líquido do mês (ritmo atual)</div>
+          <div className="rotulo">Projeção de lucro líquido do mês (ritmo desde o marco zero)</div>
           {"indisponivel" in proj ? <><div className="num valor">—</div><div className="text-xs text-warn">dado indisponível: {proj.indisponivel}</div></> : <>
             <div className={`num valor ${proj.lucroLiquido < 0 ? "neg" : "pos"}`}>{money(proj.lucroLiquido)}</div>
             <div className="text-xs text-ink-3">{money(mes.totais.lucroLiquido)} em {proj.diasDecorridos.toFixed(1)} dia(s) decorridos, projetado para os {proj.diasConsiderados} dias do mês a partir do início do acompanhamento · receita projetada {money(proj.receitaLiquida)}</div>

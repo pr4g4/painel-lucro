@@ -15,6 +15,13 @@
       "when": 1791085117452,
       "tag": "0001_zenith_eventos",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791172363761,
+      "tag": "0002_indices_desempenho",
+      "breakpoints": true
     }
   ]
 }

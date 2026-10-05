@@ -31,6 +31,7 @@ export type VendaCalc = {
   reservaBrl: number;
   reservaLiberadaEm: Date | null;
   historico: boolean;
+  metodo?: string | null; // oxxo | spei | … (do payload), para o prazo de expiração do pendente
 };
 
 export type LancamentoCalc = {
@@ -116,6 +117,7 @@ export type ResultadoDRE = {
     ia: number;
     iaKie: number;
     iaOpenai: number;
+    iaManual: number;
     operacao: number;
     entradasManuais: number;
     custosTotais: number;

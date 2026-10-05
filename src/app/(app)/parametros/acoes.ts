@@ -1,6 +1,7 @@
 "use server";
 import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidarDados } from "@/lib/cache";
 import { fromZonedTime } from "date-fns-tz";
 import { db, schema } from "@/db";
 import { exigirSessao } from "@/lib/auth/sessao";
@@ -18,7 +19,7 @@ export async function novaVigencia(form: FormData) {
     await tx.update(schema.parametros).set({ vigenciaFim: inicio }).where(and(eq(schema.parametros.chave, chave), isNull(schema.parametros.vigenciaFim)));
     await tx.insert(schema.parametros).values({ chave, valor, vigenciaInicio: inicio, observacao: String(form.get("observacao") || "") || null });
   });
-  revalidatePath("/parametros"); revalidatePath("/"); revalidatePath("/dre");
+  invalidarDados(); revalidatePath("/parametros"); revalidatePath("/"); revalidatePath("/dre");
 }
 
 export async function salvarFrente(form: FormData) {
@@ -38,7 +39,7 @@ export async function salvarFrente(form: FormData) {
     const f = frentes.find((fr) => { try { return new RegExp(fr.regraCampanha, "i").test(c.nome); } catch { return false; } });
     await db.update(schema.campanhas).set({ frenteId: f?.id ?? null }).where(eq(schema.campanhas.id, c.id));
   }
-  revalidatePath("/parametros"); revalidatePath("/campanhas");
+  invalidarDados(); revalidatePath("/parametros"); revalidatePath("/campanhas");
 }
 
 export async function trocarSenha(form: FormData) {
@@ -47,5 +48,5 @@ export async function trocarSenha(form: FormData) {
   const alvo = String(form.get("usuario") ?? s.usuario);
   if (alvo !== s.usuario && s.papel !== "edita") throw new Error("sem permissão");
   await db.update(schema.usuarios).set({ senhaHash: await gerarHash(nova) }).where(eq(schema.usuarios.usuario, alvo));
-  revalidatePath("/parametros");
+  invalidarDados(); revalidatePath("/parametros");
 }

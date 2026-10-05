@@ -21,7 +21,7 @@ export function Menu({ nome, papel, avisos, sair }: { nome: string; papel: strin
   const itens = MENU.map(([href, rotulo]) => {
     const ativo = pathname === href;
     return (
-      <Link key={href} href={href} className={`nav-item ${ativo ? "nav-ativo" : ""}`} onClick={() => setAberto(false)}>
+      <Link key={href} href={href} prefetch={false} className={`nav-item ${ativo ? "nav-ativo" : ""}`} onClick={() => setAberto(false)}>
         {rotulo}
         {href === "/avisos" && avisos > 0 && <span className="badge">{avisos}</span>}
       </Link>
@@ -31,7 +31,7 @@ export function Menu({ nome, papel, avisos, sair }: { nome: string; papel: strin
   return (
     <header className="topo">
       <div className="topo-inner">
-        <Link href="/" className="marca">Painel de Lucro</Link>
+        <Link href="/" prefetch={false} className="marca">Painel de Lucro</Link>
         <nav className="nav-desktop" aria-label="Principal">{itens}</nav>
         <span className="text-xs text-ink-3 hidden xl:inline whitespace-nowrap">{nome} · {papel === "edita" ? "edita" : "só vê"}</span>
         <div className="hidden md:flex items-center gap-2"><BotaoTema /><form action={sair}><button className="btn">Sair</button></form></div>

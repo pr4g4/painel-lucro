@@ -5,7 +5,30 @@
  */
 import { executarColeta, upsertLancamentos, taxaDoDia, diaBrasilia, marcoZeroAtual, abrirAviso, type NovoLancamento } from "./base";
 
-export type UsoBucket = { start_time: number; end_time: number; results: { input_tokens: number; output_tokens: number; model?: string | null; project_id?: string | null }[] };
+export type UsoBucket = { start_time: number; end_time: number; results: { input_tokens: number; input_cached_tokens?: number; output_tokens: number; model?: string | null; project_id?: string | null }[] };
+
+/** Preços por 1M tokens [entrada, entrada em cache, saída], em US$. Pode ser sobrescrito pelo parâmetro `openai_precos_json`. */
+export const PRECOS_PADRAO: Record<string, [number, number, number]> = {
+  "gpt-4o-mini": [0.15, 0.075, 0.60], "gpt-4o": [2.50, 1.25, 10.00],
+  "gpt-4.1": [2.00, 0.50, 8.00], "gpt-4.1-mini": [0.40, 0.10, 1.60], "gpt-4.1-nano": [0.10, 0.025, 0.40],
+  "gpt-5": [1.25, 0.125, 10.00], "gpt-5-mini": [0.25, 0.025, 2.00], "gpt-5-nano": [0.05, 0.005, 0.40],
+  "o3": [2.00, 0.50, 8.00], "o4-mini": [1.10, 0.275, 4.40], "o3-mini": [1.10, 0.55, 4.40],
+};
+
+/** Acha o preço de um modelo (aceita sufixos de data, ex.: gpt-4o-mini-2024-07-18). */
+export function precoDoModelo(modelo: string, tabela: Record<string, [number, number, number]>): [number, number, number] | null {
+  const m = modelo.toLowerCase();
+  if (tabela[m]) return tabela[m];
+  const chaves = Object.keys(tabela).sort((a, b) => b.length - a.length);
+  const k = chaves.find((c) => m.startsWith(c));
+  return k ? tabela[k] : null;
+}
+
+export function custoEstimado(r: { input_tokens: number; input_cached_tokens?: number; output_tokens: number }, preco: [number, number, number]): number {
+  const cached = r.input_cached_tokens ?? 0;
+  const inNaoCache = Math.max(0, (r.input_tokens ?? 0) - cached); // input_tokens inclui os em cache
+  return (inNaoCache * preco[0] + cached * preco[1] + (r.output_tokens ?? 0) * preco[2]) / 1_000_000;
+}
 export type CustoBucket = { start_time: number; end_time: number; results: { amount: { value: number; currency: string }; line_item?: string | null; project_id?: string | null }[] };
 export interface OpenAICliente {
   usoPorHora(desdeUnix: number, ateUnix: number, projectId?: string): Promise<UsoBucket[]>;
@@ -46,21 +69,32 @@ export async function coletarOpenAI(cliente: OpenAICliente, projectId: string | 
       const dia = new Date(b.start_time * 1000).toISOString().slice(0, 10);
       custoDia.set(dia, (custoDia.get(dia) ?? 0) + b.results.reduce((s, r) => s + (r.amount?.value ?? 0), 0));
     }
-    // tokens por hora/modelo e por dia (peso)
-    type Chave = { instante: Date; modelo: string; tokens: number };
+    // tabela de preços (parâmetro opcional openai_precos_json sobrescreve/complementa a padrão)
+    const tabela: Record<string, [number, number, number]> = { ...PRECOS_PADRAO };
+    try {
+      const { db, schema } = await import("@/db"); const { eq } = await import("drizzle-orm");
+      const [pp] = await db.select().from(schema.parametros).where(eq(schema.parametros.chave, "openai_precos_json")).limit(1);
+      if (pp) Object.assign(tabela, JSON.parse(pp.valor));
+    } catch { /* usa a padrão */ }
+    // por hora/modelo: tokens e custo ESTIMADO por tipo de token (entrada, entrada em cache, saída)
+    type Chave = { instante: Date; modelo: string; tokens: number; est: number | null; in: number; cached: number; out: number };
     const horas: Chave[] = [];
-    const tokensDia = new Map<string, number>();
+    const tokensDia = new Map<string, number>(); const estDia = new Map<string, number>();
     for (const b of uso) {
       const instante = new Date(b.start_time * 1000);
       const dia = instante.toISOString().slice(0, 10);
       for (const r of b.results) {
         const tokens = (r.input_tokens ?? 0) + (r.output_tokens ?? 0);
         if (!tokens) continue;
-        horas.push({ instante, modelo: r.model ?? "desconhecido", tokens });
+        const modelo = r.model ?? "desconhecido";
+        const preco = precoDoModelo(modelo, tabela);
+        const est = preco ? custoEstimado(r, preco) : null;
+        horas.push({ instante, modelo, tokens, est, in: r.input_tokens ?? 0, cached: r.input_cached_tokens ?? 0, out: r.output_tokens ?? 0 });
         tokensDia.set(dia, (tokensDia.get(dia) ?? 0) + tokens);
+        if (est != null) estDia.set(dia, (estDia.get(dia) ?? 0) + est);
       }
     }
-    // custo médio por token nos dias que têm custo E tokens (para estimar o dia corrente, cujo custo a API ainda não fechou)
+    // custo médio por token (só para modelo sem preço na tabela)
     let custoRef = 0, tokensRef = 0;
     for (const [dia, custo] of custoDia) { const t = tokensDia.get(dia) ?? 0; if (custo > 0 && t > 0) { custoRef += custo; tokensRef += t; } }
     const custoPorToken = tokensRef > 0 ? custoRef / tokensRef : null;
@@ -69,14 +103,17 @@ export async function coletarOpenAI(cliente: OpenAICliente, projectId: string | 
     for (const h of horas) {
       const dia = h.instante.toISOString().slice(0, 10);
       const custo = custoDia.get(dia) ?? 0;
-      const semCustoFechado = custo <= 0 && custoPorToken != null;
-      const usd = semCustoFechado ? h.tokens * custoPorToken : custo * (h.tokens / (tokensDia.get(dia) ?? 1));
+      const estimativa = h.est ?? (custoPorToken != null ? h.tokens * custoPorToken : 0);
+      const semCustoFechado = custo <= 0;
+      // dia fechado pela costs API: rateia o custo real pelo peso do custo estimado de cada hora/modelo (substitui a estimativa, mesma chave → sem dobrar)
+      const pesoDia = estDia.get(dia) ?? 0;
+      const usd = semCustoFechado ? estimativa : pesoDia > 0 && h.est != null ? custo * (h.est / pesoDia) : custo * (h.tokens / (tokensDia.get(dia) ?? 1));
       const cambio = await taxaDoDia("USDBRL", diaBrasilia(h.instante));
       if (!cambio) { semCambio = true; continue; }
       rows.push({
         fonte: "openai", tipo: "uso_ia", chaveNatural: `openai|${h.instante.toISOString()}|${h.modelo}`, instante: h.instante, granularidade: "hora",
-        descricao: `OpenAI ${h.modelo} (${h.tokens} tokens${semCustoFechado ? ", estimado por tokens: custo do dia ainda não fechado" : ""})`, valorOriginal: String(usd), moeda: "USD", valorBrl: String(usd * cambio.taxa), taxaCambio: String(cambio.taxa),
-        modelo: h.modelo, historico: h.instante < marco, estimado: true, payload: { tokens: h.tokens, custoDiaUsd: custo, estimadoPorTokens: semCustoFechado },
+        descricao: `OpenAI ${h.modelo} (${h.in} entrada, ${h.cached} em cache, ${h.out} saída${semCustoFechado ? (h.est != null ? "; estimado pela tabela de preços, dia ainda não fechado" : "; estimado por custo médio, modelo sem preço") : "; rateio do custo fechado do dia"})`, valorOriginal: String(usd), moeda: "USD", valorBrl: String(usd * cambio.taxa), taxaCambio: String(cambio.taxa),
+        modelo: h.modelo, historico: h.instante < marco, estimado: semCustoFechado, payload: { tokens: h.tokens, entrada: h.in, cache: h.cached, saida: h.out, custoDiaUsd: custo, estimado: semCustoFechado, estimativaUsd: estimativa },
       });
     }
     // Dias com custo mas sem uso (ex.: custo de outro tipo): grava um lançamento diário para não perder o valor

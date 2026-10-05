@@ -47,8 +47,14 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
       .map((v) => v.reservaBrl),
   );
 
-  // Pendentes (informativo, fora da receita): criadas até o fim do período e ainda pendentes
-  const pendentes = e.vendas.filter((v) => conta(v.historico) && v.status === "pendente" && (!v.criadaEm || v.criadaEm < p.fim));
+  // Pendentes (informativo, fora da receita): criadas até o fim do período, ainda pendentes e dentro do prazo do método
+  // (checkouts abandonados de OXXO/SPEI expiram: parâmetros pendente_expira_*_h)
+  const prazoH = (metodo: string | null | undefined) => {
+    const m = (metodo ?? "").toLowerCase();
+    const chave = m.includes("oxxo") ? "pendente_expira_oxxo_h" : m.includes("spei") || m.includes("clabe") ? "pendente_expira_spei_h" : "pendente_expira_outros_h";
+    return numeroVigente(params, chave, p.fim, m.includes("oxxo") ? 72 : m.includes("spei") || m.includes("clabe") ? 24 : 48);
+  };
+  const pendentes = e.vendas.filter((v) => conta(v.historico) && v.status === "pendente" && (!v.criadaEm || (v.criadaEm < p.fim && v.criadaEm.getTime() + prazoH(v.metodo) * 3_600_000 > p.fim.getTime())));
   const pendentesValor = soma(pendentes.map((v) => v.liquidoBrl));
 
   // ---------- Meta ----------
@@ -155,13 +161,13 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
     linhas,
     totais: {
       receitaBrutaMxn, receitaBrutaBrl, taxaZenithPct, taxaZenithFixa, cambioZenith, reembolsos, receitaLiquida,
-      metaExibido, metaImposto, metaComImposto, zapdata, ia: iaTotal, iaKie, iaOpenai, operacao, entradasManuais,
+      metaExibido, metaImposto, metaComImposto, zapdata, ia: iaTotal, iaKie, iaOpenai, iaManual, operacao, entradasManuais,
       custosTotais, lucroBruto, impostoLucro, lucroLiquido, porSocio: lucroLiquido / 2,
       reservaRetida, pendentesQtd: pendentes.length, pendentesValor, numVendas, numReembolsos: reembolsadasNoPeriodo.length,
     },
     indicadores: {
       roas: receitaLiquida > 0 ? div(receitaLiquida, metaComImposto) : null,
-      poas: div(lucroBruto, metaComImposto),
+      poas: receitaLiquida > 0 ? div(lucroBruto, metaComImposto) : null,
       margemLiquida: div(lucroLiquido, receitaLiquida),
       custoPorVenda: div(metaComImposto, numVendas),
       ticketMedioLiquido: div(receitaLiquida, numVendas),

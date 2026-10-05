@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { invalidarDados } from "@/lib/cache";
 import { fromZonedTime } from "date-fns-tz";
 import { exigirSessao } from "@/lib/auth/sessao";
 import { normalizarVenda } from "@/coletores/zenith";
@@ -34,11 +35,11 @@ export async function salvarVendaManual(form: FormData) {
   }, "manual");
   venda.observacao = String(form.get("observacao") || "") || null;
   await upsertVendas([venda]);
-  revalidatePath("/"); revalidatePath("/venda-manual"); revalidatePath("/dre"); revalidatePath("/lancamentos");
+  revalidatePath("/"); invalidarDados(); revalidatePath("/venda-manual"); revalidatePath("/dre"); revalidatePath("/lancamentos");
 }
 
 export async function excluirVendaManual(form: FormData) {
   await exigirSessao("edita");
   await db.delete(schema.vendas).where(and(eq(schema.vendas.fonte, "manual"), eq(schema.vendas.idOrigem, String(form.get("id")))));
-  revalidatePath("/"); revalidatePath("/venda-manual");
+  revalidatePath("/"); invalidarDados(); revalidatePath("/venda-manual");
 }

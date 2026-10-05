@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { invalidarDados } from "@/lib/cache";
 import { getIronSession } from "iron-session";
 import { SESSAO_OPCOES, type Sessao } from "@/lib/auth/sessao";
 import { reprocessarEventosZenith, resumoCambio } from "@/coletores/zenith-aplicar";
@@ -19,5 +20,6 @@ export async function GET(req: NextRequest) {
   const dedup = req.nextUrl.searchParams.get("dedup");
   const desde = new Date(req.nextUrl.searchParams.get("desde") ?? "2026-10-03T03:00:00Z");
   const duplicadas = dedup ? await varrerDuplicadas(desde, dedup === "aplicar") : null;
+  invalidarDados();
   return NextResponse.json({ cambioColetado: cambio, taxas: await resumoCambio(), reprocessamento: r, duplicadas: duplicadas ? { modo: dedup === "aplicar" ? "anuladas" : "só listadas (use dedup=aplicar para anular)", quantidade: duplicadas.pares.length, pares: duplicadas.pares } : undefined });
 }

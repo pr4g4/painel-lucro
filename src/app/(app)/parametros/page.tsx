@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 const TZ = process.env.APP_TZ ?? "America/Sao_Paulo";
 const ROTULO: Record<string, string> = {
   marco_zero: "Marco zero (ISO UTC)", imposto_meta_pct: "Imposto Meta (%)", taxa_zenith_pct: "Taxa Zenith (%)", taxa_zenith_fixa_mxn: "Taxa fixa Zenith (MX$)", taxa_zenith_fixa_brl: "Taxa fixa Zenith (R$)",
-  cambio_zenith_pct: "Câmbio Zenith (%)", reserva_zenith_pct: "Reserva Zenith padrão (%)", imposto_lucro_pct: "Imposto sobre lucro (%)", imposto_lucro_base: "Base do imposto (a/b/c)", kie_usd_por_credito: "kie.ai: US$ por crédito", kie_pacote_creditos: "kie.ai: créditos por pacote de recarga", alerta_saldo_horas: "Alerta de saldo: menos de N horas", alerta_saldo_usd: "Alerta de saldo: menos de US$ N",
+  cambio_zenith_pct: "Câmbio Zenith (%)", reserva_zenith_pct: "Reserva Zenith padrão (%)", imposto_lucro_pct: "Imposto sobre lucro (%)", imposto_lucro_base: "Base do imposto (a/b/c)", kie_usd_por_credito: "kie.ai: US$ por crédito", kie_pacote_creditos: "kie.ai: créditos por pacote de recarga", alerta_saldo_horas: "Alerta de saldo: menos de N horas", alerta_saldo_usd: "Alerta de saldo: menos de US$ N", openai_precos_json: "OpenAI: preços por 1M tokens (JSON {modelo: [entrada, cache, saída]})",
 };
 
 export default async function Parametros() {

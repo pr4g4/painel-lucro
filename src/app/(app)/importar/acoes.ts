@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { invalidarDados } from "@/lib/cache";
 import { exigirSessao } from "@/lib/auth/sessao";
 import { lerCsvZenithAuto, importarVendasZenith } from "@/coletores/zenith";
 
@@ -12,7 +13,7 @@ export async function importarCsv(_prev: { ok?: boolean; mensagem?: string } | u
   const vendas = lerCsvZenithAuto(texto);
   if (!vendas.length) return { ok: false, mensagem: "Não encontrei linhas de venda no CSV (esperado o arquivo de Conciliação da Zenith, com id_venda; ou um CSV com id, status, data, bruto…)." };
   const r = await importarVendasZenith(vendas, "zenith");
-  revalidatePath("/"); revalidatePath("/dre"); revalidatePath("/lancamentos");
+  revalidatePath("/"); invalidarDados(); revalidatePath("/dre"); revalidatePath("/lancamentos");
   const aprovadas = vendas.filter((v) => v.status === "aprovada").length, pendentes = vendas.filter((v) => v.status === "pendente").length;
   return r.ok ? { ok: true, mensagem: `${r.registros} venda(s) importadas/atualizadas: ${aprovadas} aprovada(s), ${pendentes} pendente(s), ${vendas.length - aprovadas - pendentes} outra(s). Importar de novo não duplica.` } : { ok: false, mensagem: `Falhou: ${r.erro}` };
 }

@@ -23,6 +23,11 @@ Atualizado em 04/10/2026. Nada aqui bloqueia o que já está pronto; cada item d
 - No painel, o selo **"agendador: há N min"** usa a coleta de câmbio como batimento (ela roda sempre). Mais de 15 min = parado.
 - No Supabase → SQL Editor: `select start_time, status, return_message from cron.job_run_details order by start_time desc limit 10;` Se `status = failed`, cole o `return_message` para mim. Fontes sem chave (Meta/OpenAI/kie) agora mostram "sem chave (tentou HH:MM)" em vez de uma hora antiga.
 
+## Após o deploy de 05/10 (desempenho e correções)
+- Rodar `drizzle/0002_indices_desempenho.sql` no Supabase e abrir `/api/seed?segredo=…` (cria `pendente_expira_oxxo_h` = 72, `pendente_expira_spei_h` = 24, `pendente_expira_outros_h` = 48 e `openai_precos_json` fica opcional).
+- Produto nas vendas: o CSV de Conciliação da Zenith NÃO traz produto. O webhook preenche se o payload tiver `productName`, `product.name/title`, `checkout.name/title`, `items[0].name`, `metadata.product`/`plan`, `infoproduct`, `description`. Se /produtos continuar vazio, abra uma linha de `zenith_eventos` e me diga quais campos o `data` tem.
+- Conta Meta 01 (act_210256430938513): a tela Campanhas agora mostra, por conta, quantas linhas a última coleta trouxe. "0 linhas" sem erro = a Meta não devolveu gasto (campanhas pausadas/sem veiculação); com erro = problema de acesso.
+
 ## Decisões a confirmar
 5. **Teste de sanidade do ZapData (R$ 126,68).** Pela fórmula 4 (ciclo dia 2 → dia 1), 12/09–02/10 dá R$ 83,17. O valor 126,68 = 33 dias × R$ 119 ÷ 31, ou seja, uma janela de 33 dias (ex.: 31/08–02/10). Divergência maior que R$ 1,00; implementei a fórmula 4 como escrita. Confirmar qual janela foi usada ou aceitar 83,17 como o número correto para 12/09–02/10.
 6. **Reembolso de venda histórica (anterior ao marco zero).** Hoje fica fora da receita (começamos do zero). Se quiser que apareça como linha negativa mesmo assim, é um ajuste de 1 linha.

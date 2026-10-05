@@ -81,6 +81,7 @@ export const lancamentos = pgTable("lancamentos", {
   uniqueIndex("lancamentos_chave").on(t.chaveNatural),
   index("lancamentos_instante").on(t.instante),
   index("lancamentos_fonte_instante").on(t.fonte, t.instante),
+  index("lancamentos_fonte_tipo_instante").on(t.fonte, t.tipo, t.instante),
 ]);
 
 // ---------- vendas ----------
@@ -113,6 +114,8 @@ export const vendas = pgTable("vendas", {
   uniqueIndex("vendas_fonte_id").on(t.fonte, t.idOrigem),
   index("vendas_aprovada").on(t.aprovadaEm),
   index("vendas_reembolsada").on(t.reembolsadaEm),
+  index("vendas_status_criada").on(t.status, t.criadaEm),
+  index("vendas_fonte_status").on(t.fonte, t.status),
 ]);
 
 // ---------- lançamentos manuais (saída/entrada, única ou recorrente) ----------
@@ -164,7 +167,7 @@ export const coletas = pgTable("coletas", {
   registros: integer("registros").notNull().default(0),
   erro: text("erro"),
   detalhe: jsonb("detalhe"),
-}, (t) => [index("coletas_fonte_inicio").on(t.fonte, t.iniciadaEm)]);
+}, (t) => [index("coletas_fonte_inicio").on(t.fonte, t.iniciadaEm), index("coletas_fonte_ok_inicio").on(t.fonte, t.ok, t.iniciadaEm)]);
 
 export const avisos = pgTable("avisos", {
   id: serial("id").primaryKey(),
@@ -187,7 +190,7 @@ export const zenithEventos = pgTable("zenith_eventos", {
   resultado: text("resultado"), // ex.: "venda Z123 aprovada", "ignorado: tipo desconhecido", erro
   vendaIdOrigem: text("venda_id_origem"),
   payload: jsonb("payload").notNull(), // corpo bruto (JSON) — sem dados de cartão (a Zenith não envia PAN)
-}, (t) => [index("zenith_eventos_recebido").on(t.recebidoEm)]);
+}, (t) => [index("zenith_eventos_recebido").on(t.recebidoEm), index("zenith_eventos_pendentes").on(t.assinaturaOk, t.processado)]);
 
 export const visoesSalvas = pgTable("visoes_salvas", {
   id: serial("id").primaryKey(),

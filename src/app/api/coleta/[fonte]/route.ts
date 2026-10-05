@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { invalidarDados } from "@/lib/cache";
 import { coletar, coletarTudo, FONTES, type Fonte } from "@/coletores";
 import { getIronSession } from "iron-session";
 import { SESSAO_OPCOES, type Sessao } from "@/lib/auth/sessao";
@@ -19,9 +20,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ fon
   }
   if (!segredoOk && !sessaoOk) return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
 
-  if (fonte === "todas") return NextResponse.json({ resultados: await coletarTudo() });
+  if (fonte === "todas") { const resultados = await coletarTudo(); invalidarDados(); return NextResponse.json({ resultados }); }
   if (!(FONTES as readonly string[]).includes(fonte)) return NextResponse.json({ erro: `fonte desconhecida: ${fonte}` }, { status: 404 });
-  return NextResponse.json({ resultado: await coletar(fonte as Fonte) });
+  const resultado = await coletar(fonte as Fonte); invalidarDados();
+  return NextResponse.json({ resultado });
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ fonte: string }> }) {

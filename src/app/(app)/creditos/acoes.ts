@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { invalidarDados } from "@/lib/cache";
 import { fromZonedTime } from "date-fns-tz";
 import { schema, executar } from "@/db";
 import { exigirSessao } from "@/lib/auth/sessao";
@@ -23,6 +24,6 @@ export async function registrarCreditoOpenAI(_prev: { ok?: boolean; mensagem?: s
     valorOriginal: String(valor), moeda: "USD", valorBrl: "0", taxaCambio: "0", historico: false, estimado: false, payload: { usuario: s.usuario },
   }).onConflictDoUpdate({ target: schema.lancamentos.chaveNatural, set: { valorOriginal: String(valor), coletadoEm: new Date() } }));
   await verificarSaldos().catch(() => {});
-  revalidatePath("/"); revalidatePath("/resumo"); revalidatePath("/avisos");
+  revalidatePath("/"); invalidarDados(); revalidatePath("/resumo"); revalidatePath("/avisos");
   return { ok: true, mensagem: tipo === "saldo_ref" ? `Referência gravada: US$ ${valor.toFixed(2)}.` : `Recarga de US$ ${valor.toFixed(2)} registrada (não entra como custo).` };
 }

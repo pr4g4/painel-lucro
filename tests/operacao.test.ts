@@ -76,8 +76,37 @@ describe("correções 04/10: ROAS sem receita, projeção sem receita", () => {
     const periodo = P("2026-10-03T00:00", "2026-10-04T00:00");
     const dre = calcularDRE({ periodo, parametros: params, vendas: [], lancamentos: [metaLanc({ instante: brt("2026-10-03T09:00"), valor: 100 })], manuais: [], opcoes: opcoes() });
     expect(dre.indicadores.roas).toBeNull();
-    expect(dre.indicadores.poas).not.toBeNull();
+    expect(dre.indicadores.poas).toBeNull(); // sem receita, POAS também vira "—"
     const p = projecaoMes(dre, brt("2026-10-06T00:00"), TZ, brt("2026-10-03T00:00"));
     expect("indisponivel" in p && p.indisponivel).toMatch(/sem receita ainda/);
+  });
+});
+
+describe("OpenAI: custo estimado por tipo de token", () => {
+  it("gpt-4o-mini, 6.593.789 tokens: só entrada → ≈ US$ 0,99; com cache barateia; modelo com sufixo de data acha o preço", async () => {
+    const { precoDoModelo, custoEstimado, PRECOS_PADRAO } = await import("../src/coletores/openai");
+    const preco = precoDoModelo("gpt-4o-mini-2024-07-18", PRECOS_PADRAO)!;
+    expect(preco).toEqual([0.15, 0.075, 0.60]);
+    expect(custoEstimado({ input_tokens: 6_593_789, output_tokens: 0 }, preco)).toBeCloseTo(0.989, 2);
+    expect(custoEstimado({ input_tokens: 6_000_000, input_cached_tokens: 4_000_000, output_tokens: 100_000 }, preco)).toBeCloseTo(2_000_000 * 0.15e-6 + 4_000_000 * 0.075e-6 + 100_000 * 0.6e-6, 6);
+    expect(precoDoModelo("modelo-misterioso", PRECOS_PADRAO)).toBeNull();
+  });
+});
+
+describe("pendentes expiram por método; consumo rateado por sobreposição", () => {
+  it("OXXO pendente há 80 h some; SPEI pendente há 20 h fica; outros 48 h", () => {
+    const fim = brt("2026-10-05T12:00");
+    const periodo = P("2026-10-05T00:00", "2026-10-05T12:00");
+    const mk = (hAtras: number, metodo: string | null) => ({ ...vendaZenith({ brutoMxn: 99, aprovadaEm: new Date(fim.getTime() - hAtras * 3_600_000), status: "pendente", metodo }), criadaEm: new Date(fim.getTime() - hAtras * 3_600_000) });
+    const vendas = [mk(80, "OXXO"), mk(20, "SPEI · CLABE fixa"), mk(30, "SPEI · CLABE fixa"), mk(50, null), mk(10, null)];
+    const r = calcularDRE({ periodo, parametros: params, vendas, lancamentos: [], manuais: [], opcoes: opcoes() });
+    expect(r.totais.pendentesQtd).toBe(2); // SPEI 20 h e outros 10 h
+  });
+  it("uso por hora que atravessa a referência é rateado pela fração", async () => {
+    const { usoEntre } = await import("../src/lib/calculo");
+    const uso = [{ id: 1, fonte: "openai", tipo: "uso_ia", instante: new Date("2026-10-05T03:00:00Z"), granularidade: "hora", descricao: "", valorBrl: 0, valorOriginal: 1.58, moeda: "USD", contaId: null, campanhaId: null, modelo: null, frente: null, historico: false, estimado: true }];
+    // referência às 03:26Z: só 34 dos 60 min da hora contam
+    expect(usoEntre(uso, new Date("2026-10-05T03:26:00Z"), new Date("2026-10-05T05:00:00Z"))).toBeCloseTo(1.58 * 34 / 60, 6);
+    expect(usoEntre(uso, new Date("2026-10-05T04:00:00Z"), new Date("2026-10-05T05:00:00Z"))).toBe(0);
   });
 });

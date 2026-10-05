@@ -1,6 +1,7 @@
 "use server";
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidarDados } from "@/lib/cache";
 import { fromZonedTime } from "date-fns-tz";
 import { db, schema } from "@/db";
 import { exigirSessao } from "@/lib/auth/sessao";
@@ -29,13 +30,13 @@ export async function salvarManual(form: FormData) {
   };
   if (id) await db.update(schema.lancamentosManuais).set(dados).where(eq(schema.lancamentosManuais.id, id));
   else await db.insert(schema.lancamentosManuais).values({ ...dados, criadoPor: s.usuarioId });
-  revalidatePath("/"); revalidatePath("/manuais"); revalidatePath("/dre");
+  revalidatePath("/"); invalidarDados(); revalidatePath("/manuais"); revalidatePath("/dre");
 }
 
 export async function excluirManual(form: FormData) {
   await exigirSessao("edita");
   await db.delete(schema.lancamentosManuais).where(eq(schema.lancamentosManuais.id, Number(form.get("id"))));
-  revalidatePath("/"); revalidatePath("/manuais");
+  revalidatePath("/"); invalidarDados(); revalidatePath("/manuais");
 }
 
 export async function salvarCategoria(form: FormData) {
@@ -46,7 +47,7 @@ export async function salvarCategoria(form: FormData) {
   const id = form.get("id") ? Number(form.get("id")) : null;
   if (id) await db.update(schema.categorias).set({ nome, linhaDre }).where(eq(schema.categorias.id, id));
   else await db.insert(schema.categorias).values({ nome, linhaDre }).onConflictDoNothing();
-  revalidatePath("/manuais");
+  invalidarDados(); revalidatePath("/manuais");
 }
 
 export async function excluirCategoria(form: FormData) {
@@ -54,5 +55,5 @@ export async function excluirCategoria(form: FormData) {
   const id = Number(form.get("id"));
   await db.update(schema.lancamentosManuais).set({ categoriaId: null }).where(eq(schema.lancamentosManuais.categoriaId, id));
   await db.delete(schema.categorias).where(eq(schema.categorias.id, id));
-  revalidatePath("/manuais");
+  invalidarDados(); revalidatePath("/manuais");
 }

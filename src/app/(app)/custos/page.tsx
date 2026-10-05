@@ -16,7 +16,7 @@ export default async function Custos({ searchParams }: { searchParams: Promise<P
   const itens: { nome: string; valor: number; ant: number | null; filhos?: { nome: string; valor: number }[] }[] = [
     { nome: "Meta com imposto", valor: t.metaComImposto, ant: a.metaComImposto, filhos: meta?.filhos?.map((f) => ({ nome: f.rotulo, valor: -f.valor })) },
     { nome: "ZapData diluído", valor: t.zapdata, ant: a.zapdata },
-    { nome: "IA", valor: t.ia, ant: a.ia, filhos: [{ nome: "kie.ai", valor: t.iaKie }, { nome: "OpenAI", valor: t.iaOpenai }] },
+    { nome: "IA", valor: t.ia, ant: a.ia, filhos: [{ nome: "kie.ai", valor: t.iaKie }, { nome: "OpenAI", valor: t.iaOpenai }, ...(t.iaManual ? [{ nome: "IA (manual)", valor: t.iaManual }] : [])] },
     { nome: "Operação (por categoria)", valor: t.operacao, ant: a.operacao, filhos: op?.filhos?.map((f) => ({ nome: f.rotulo, valor: -f.valor })) },
   ];
   const total = t.custosTotais;
