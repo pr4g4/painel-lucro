@@ -1,4 +1,4 @@
-import { coletarCambio, ptaxCliente } from "./cambio";
+import { coletarCambio, clienteReal as cambioReal } from "./cambio";
 import { coletarMeta, metaClienteReal } from "./meta";
 import { coletarOpenAI, openaiClienteReal } from "./openai";
 import { coletarKie, kieClienteReal } from "./kie";
@@ -9,13 +9,13 @@ export const FONTES = ["cambio", "meta", "openai", "kie", "zenith"] as const;
 export type Fonte = (typeof FONTES)[number];
 
 export const ROTULO_FONTE: Record<string, string> = {
-  cambio: "Câmbio (PTAX)", meta: "Meta Ads", openai: "OpenAI", kie: "kie.ai", zenith: "Zenith", manual: "Manual", zapdata: "ZapData",
+  cambio: "Câmbio", meta: "Meta Ads", openai: "OpenAI", kie: "kie.ai", zenith: "Zenith", manual: "Manual", zapdata: "ZapData",
 };
 
 /** Roda um coletor real com as variáveis do servidor. Fonte sem chave vira aviso "não configurada", não erro. */
 export async function coletar(fonte: Fonte): Promise<ResultadoColeta> {
   switch (fonte) {
-    case "cambio": return coletarCambio(ptaxCliente);
+    case "cambio": return coletarCambio(cambioReal);
     case "meta": {
       const token = process.env.META_TOKEN;
       const contas = [process.env.META_ACT_00, process.env.META_ACT_01].filter(Boolean) as string[];

@@ -10,6 +10,7 @@ import { VisoesSalvas } from "@/components/visoes";
 import { BlocoOperacao } from "@/components/operacao";
 import { fmtHora, fmtMoeda } from "@/lib/formato";
 import { ROTULO_FONTE } from "@/coletores";
+import { ultimaTaxaMxnInfo, ROTULO_FONTE_CAMBIO } from "@/coletores/cambio";
 import type { Params } from "@/lib/periodo-url";
 import type { ResultadoDRE } from "@/lib/calculo";
 
@@ -23,6 +24,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   const hojeAnt = periodoAnterior(hojeP, estado.tz);
   const hoje = { atual: ctx.calc(hojeP), anterior: ctx.calc(hojeAnt), temBaseAnterior: ctx.temDados(hojeAnt) };
   const fatias = dreFatiada(ctx.entrada, estado.periodo, estado.gran, estado.tz);
+  const taxaMxnInfo = await ultimaTaxaMxnInfo().catch(() => null);
   const mesP = resolverAtalho("mes_atual", estado.agora, estado.marcoZero, estado.tz).periodo;
   const mes = ctx.calc(mesP);
 
@@ -39,7 +41,8 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
         {["meta", "zenith", "cambio", "openai", "kie"].map((f) => {
           const c = coletas.get(f);
           const atras = !c?.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000;
-          const texto = c?.naoConfigurada ? `sem chave (tentou ${fmtHora(c.ultima, estado.tz)})` : c?.ultimaOk ? fmtHora(c.ultimaOk, estado.tz) : c ? `falhou ${fmtHora(c.ultima, estado.tz)}` : "nunca";
+          let texto = c?.naoConfigurada ? `sem chave (tentou ${fmtHora(c.ultima, estado.tz)})` : c?.ultimaOk ? fmtHora(c.ultimaOk, estado.tz) : c ? `falhou ${fmtHora(c.ultima, estado.tz)}` : "nunca";
+          if (f === "cambio") texto += taxaMxnInfo ? ` · MXN ${taxaMxnInfo.taxa.toFixed(4)} (${ROTULO_FONTE_CAMBIO[taxaMxnInfo.fonte] ?? taxaMxnInfo.fonte}, ${taxaMxnInfo.dia.slice(8, 10)}/${taxaMxnInfo.dia.slice(5, 7)})` : " · sem taxa MXN";
           return <span key={f} className={`px-2 py-0.5 rounded-full border border-border ${atras && f !== "zenith" && !c?.naoConfigurada ? "text-warn" : c?.naoConfigurada ? "text-ink-3" : ""}`} title={c?.erro ?? ""}>{ROTULO_FONTE[f]} {texto}{f === "zenith" && !c?.ultimaOk ? " (webhook/CSV)" : ""}</span>;
         })}
         {(() => { const c = coletas.get("cambio"); const ha = c ? Math.round((estado.agora.getTime() - c.ultima.getTime()) / 60_000) : null; return <span className={`px-2 py-0.5 rounded-full border border-border ${ha == null || ha > 15 ? "text-warn" : "text-pos"}`} title="O agendador (pg_cron) chama a coleta a cada 10 min; o câmbio roda sempre, então ele é o batimento.">agendador: {ha == null ? "nunca rodou" : `há ${ha} min`}</span>; })()}

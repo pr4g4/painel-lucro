@@ -88,13 +88,12 @@ export function kieSimulado(saldos: number[]): KieCliente {
   return { async saldoCreditos() { const s = saldos[Math.min(i, saldos.length - 1)]; i++; return s; } };
 }
 
-/** PTAX simulada: USD 5,40 e MXN 0,30 todos os dias úteis. */
+/** Câmbio simulado: PTAX USD 5,40 e ECB MXN→USD = mxn/usd (resulta em MXN→BRL = mxn), só dias úteis. */
 export function cambioSimulado(usd = 5.40, mxn = 0.30): CambioCliente {
+  const uteis = (de: string, ate: string) => diasEntre(de, ate).filter((d) => { const dow = new Date(`${d}T12:00:00Z`).getUTCDay(); return dow !== 0 && dow !== 6; });
   return {
-    async cotacoes(par, de, ate) {
-      return diasEntre(de, ate).filter((d) => { const dow = new Date(`${d}T12:00:00Z`).getUTCDay(); return dow !== 0 && dow !== 6; })
-        .map((dia) => ({ dia, taxa: par === "USDBRL" ? usd : mxn }));
-    },
+    async ptaxUsd(de, ate) { return uteis(de, ate).map((dia) => ({ dia, taxa: usd })); },
+    async ecbMxn(de, ate) { return uteis(de, ate).map((dia) => ({ dia, mxnUsd: mxn / usd, mxnBrl: mxn * 1.01 })); },
   };
 }
 
