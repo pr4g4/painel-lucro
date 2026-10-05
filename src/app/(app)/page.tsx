@@ -11,7 +11,10 @@ import { BotaoAtualizar } from "@/components/atualizar";
 import { VisoesSalvas } from "@/components/visoes";
 import { FaltaEmpatar, Projecao, GastoPorHora, TabelaNumeros } from "@/components/operacao";
 import { CartoesCreditos } from "@/components/creditos";
-import { fmtHora, fmtMoeda, fmtMXN } from "@/lib/formato";
+import { carregarCreditos } from "@/coletores/creditos";
+import { semaforoSaldo, coletaFalhando } from "@/lib/hoje";
+import { faltaParaEmpatar, gastoPorNumero } from "@/lib/calculo";
+import { fmtHora, fmtMoeda, fmtMXN, fmtHorasRestantes } from "@/lib/formato";
 import { ROTULO_FONTE } from "@/coletores";
 import { ultimaTaxaMxnInfo, ROTULO_FONTE_CAMBIO } from "@/coletores/cambio";
 import type { Params } from "@/lib/periodo-url";
@@ -25,7 +28,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   const hojeP = resolverAtalho("hoje", estado.agora, estado.marcoZero, estado.tz).periodo;
   const hoje = ctx.calc(hojeP);
   const fatias = dreFatiada(ctx.entrada, estado.periodo, estado.gran, estado.tz);
-  const taxaMxnInfo = await ultimaTaxaMxnInfo().catch(() => null);
+  const [taxaMxnInfo, creditos] = await Promise.all([ultimaTaxaMxnInfo().catch(() => null), carregarCreditos(estado.agora, estado.tz).catch(() => null)]);
   const mesBruto = resolverAtalho("mes_atual", estado.agora, estado.marcoZero, estado.tz).periodo;
   const mesP = { inicio: new Date(Math.max(mesBruto.inicio.getTime(), estado.marcoZero.getTime())), fim: mesBruto.fim }; // mesma base do "desde o marco zero"
   const mes = ctx.calc(mesP);
@@ -39,11 +42,24 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   const varLucro = textoVariacao(t.lucroLiquido, a.lucroLiquido, temBaseAnterior, "moeda", estado.moeda, taxaMxn);
   const atrasadas = [...coletas.entries()].filter(([f, c]) => f !== "zenith" && !c.naoConfigurada && (!c.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000));
   const query = new URLSearchParams(Object.entries(sp).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : []))).toString();
+  const numeros = gastoPorNumero(ctx.entrada.lancamentos, estado.periodo, ctx.params, estado.incluirHistorico);
+  const topNumero = Array.isArray(numeros) && numeros.length ? [...numeros].sort((x, y) => y.gasto - x.gasto)[0] : null;
+  const falta = faltaParaEmpatar(hoje);
+  const COR_SEM = { verde: "pos", amarelo: "text-warn", vermelho: "neg", cinza: "" } as const;
+  const resumoCreditos = (() => {
+    if (!creditos) return "dado indisponível";
+    const itens = [["kie.ai", creditos.kie, "kie"], ["OpenAI", creditos.openai, "openai"]] as const;
+    const comHoras = itens.filter(([, s]) => s.horasRestantes != null).sort((a, b) => a[1].horasRestantes! - b[1].horasRestantes!);
+    if (!comHoras.length) return "sem estimativa de duração";
+    const [nome, s, fonte] = comHoras[0];
+    const sem = semaforoSaldo(s, coletaFalhando(coletas.get(fonte), estado.agora));
+    return <span className={COR_SEM[sem]}>{nome} acaba em {fmtHorasRestantes(s.horasRestantes)}</span>;
+  })();
   const cCambio = coletas.get("cambio"); const agendadorHa = cCambio ? Math.round((estado.agora.getTime() - cCambio.ultima.getTime()) / 60_000) : null;
 
   return (
     <>
-      <Suspense fallback={<div className="h-12 skeleton" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
+      <Suspense fallback={<div className="h-12 skeleton" />}><SeletorPeriodo {...ctx.propsSeletor} semRotulo /></Suspense>
       <VisoesSalvas />
       {ctx.problemas.length > 0 && <div className="text-xs text-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
 
@@ -53,7 +69,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
           <div className="hero-k">Lucro líquido do período <span className="text-ink-3">· {ctx.propsSeletor.rotuloPeriodo}</span></div>
           <div className={`hero-v num ${t.lucroLiquido < 0 ? "neg" : t.lucroLiquido > 0 ? "pos" : ""}`}>{money(t.lucroLiquido)}</div>
           <div className="hero-sub num">
-            <span className={varLucro.bom == null ? "" : varLucro.bom ? "pos" : "neg"}>{varLucro.texto}{varLucro.bom != null && <span className="text-ink-3"> ({ctx.propsSeletor.rotuloAnterior})</span>}</span>
+            {varLucro.texto && <span className={varLucro.bom == null ? "" : varLucro.bom ? "pos" : "neg"}>{varLucro.texto}<span className="text-ink-3"> ({ctx.propsSeletor.rotuloAnterior})</span></span>}
             <span>metade para cada sócio {money(t.porSocio)}</span>
           </div>
         </div>
@@ -73,13 +89,12 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
 
       <Secao id="indicadores" titulo="Indicadores" resumo={`margem ${i.margemLiquida == null ? "—" : `${(i.margemLiquida * 100).toFixed(1)}%`} · ROAS ${i.roas == null ? "—" : `${i.roas.toFixed(2)}×`}`}>
         <div className="grade-metricas">
-          <Metrica rotulo="Lucro bruto" valor={t.lucroBruto} anterior={a.lucroBruto} colorir {...base} />
+          {Math.abs(t.lucroBruto - t.lucroLiquido) >= 0.005 && <Metrica rotulo="Lucro bruto" valor={t.lucroBruto} anterior={a.lucroBruto} colorir {...base} />}
           <Metrica rotulo="Margem líquida" valor={i.margemLiquida} anterior={ia.margemLiquida} formato="pct" temBase={temBaseAnterior} />
           <Metrica rotulo="Ticket médio líquido" valor={i.ticketMedioLiquido} anterior={ia.ticketMedioLiquido} {...base} />
           <Metrica rotulo="Custo por venda" valor={i.custoPorVenda} anterior={ia.custoPorVenda} inverterSinal {...base} />
           <Metrica rotulo="ROAS" valor={i.roas} anterior={ia.roas} formato="razao" temBase={temBaseAnterior} nota={i.roas == null ? "sem receita no período" : undefined} />
           <Metrica rotulo="POAS" valor={i.poas} anterior={ia.poas} formato="razao" temBase={temBaseAnterior} nota={i.poas == null ? "sem receita no período" : undefined} />
-          <Metrica rotulo="Metade para cada sócio" valor={t.porSocio} anterior={a.porSocio} colorir {...base} />
           <Metrica rotulo="Imposto sobre lucro" valor={t.impostoLucro} anterior={a.impostoLucro} inverterSinal {...base} />
         </div>
       </Secao>
@@ -107,17 +122,17 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
         </div>
       </Secao>
 
-      <Secao id="numeros" titulo="Por número de WhatsApp">
+      <Secao id="numeros" titulo="Por número de WhatsApp" resumo={topNumero ? `maior gasto: ${topNumero.numero} ${money(topNumero.gasto)}` : "sem gasto no período"}>
         <TabelaNumeros lancamentos={ctx.entrada.lancamentos} periodo={estado.periodo} params={ctx.params} incluirHistorico={estado.incluirHistorico} {...d} />
       </Secao>
 
-      <Secao id="graficos" titulo="Gráficos">
+      <Secao id="graficos" titulo="Gráficos" resumo={`lucro por ${estado.gran} · ${fatias.length} pontos`}>
         <Grafico dados={dadosGrafico} titulo={`Receita líquida × custos empilhados + lucro líquido (por ${estado.gran})`} />
         <GastoPorHora lancamentos={ctx.entrada.lancamentos} periodo={estado.periodo} tz={estado.tz} params={ctx.params} incluirHistorico={estado.incluirHistorico} rotuloPeriodo={ctx.propsSeletor.rotuloPeriodo} {...d} />
         {estado.moeda === "MXN" && <p className="text-xs text-ink-3">Valores em MX$ convertidos de BRL pela última taxa MXN→BRL conhecida ({taxaMxn?.toFixed(4) ?? "—"}). Gráficos permanecem em R$.</p>}
       </Secao>
 
-      <Secao id="projecao" titulo="Projeção e ponto de equilíbrio">
+      <Secao id="projecao" titulo="Projeção e ponto de equilíbrio" resumo={falta.faltaReceita === 0 ? <span className="pos">hoje já está no lucro</span> : `falta ${money(falta.faltaReceita)} para empatar hoje`}>
         <div className="grade-metricas">
           <FaltaEmpatar hoje={hoje} {...d} />
           <Projecao mes={mes} agora={estado.agora} tz={estado.tz} marcoZero={estado.marcoZero} {...d} />
@@ -126,8 +141,8 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
         </div>
       </Secao>
 
-      <Secao id="creditos" titulo="Créditos das IAs">
-        <CartoesCreditos tz={estado.tz} agora={estado.agora} edita={ctx.sessao.papel === "edita"} />
+      <Secao id="creditos" titulo="Créditos das IAs" resumo={resumoCreditos}>
+        <CartoesCreditos tz={estado.tz} agora={estado.agora} edita={ctx.sessao.papel === "edita"} dados={creditos} />
       </Secao>
 
       <Secao id="fontes" titulo="Fontes e atualização" resumo={agendadorHa == null ? "agendador nunca rodou" : `agendador há ${agendadorHa} min${atrasadas.length ? ` · ${atrasadas.length} fonte(s) atrasada(s)` : ""}`}>

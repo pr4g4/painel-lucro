@@ -1,5 +1,5 @@
 import { variacao } from "@/lib/calculo";
-import { fmtMoeda, fmtPct, type Moeda } from "@/lib/formato";
+import { fmtMoeda, fmtPct, pctFazSentido, type Moeda } from "@/lib/formato";
 
 export function Cartao(props: {
   rotulo: string; valor: number | null | undefined; anterior?: number | null; temBase?: boolean; formato?: "moeda" | "razao" | "pct" | "int" | "texto";
@@ -17,10 +17,10 @@ export function Cartao(props: {
       <div className="rotulo truncate" title={props.rotulo}>{props.rotulo}</div>
       <div className={`num ${props.hero ? "valor-xl" : "valor"} ${negativo ? "neg" : positivo ? "pos" : ""}`}>{texto}</div>
       <div className={`text-xs num ${props.hero ? "sub" : "text-ink-3"}`}>
-        {props.indisponivel ? <span className="text-warn">dado indisponível: {props.indisponivel}</span> : v.abs == null ? "sem base de comparação" : (
+        {props.indisponivel ? <span className="text-warn">dado indisponível: {props.indisponivel}</span> : v.abs == null ? null : (
           <span className={bom ? "pos" : "neg"}>
             {formato === "moeda" ? `${v.abs >= 0 ? "+" : ""}${fmtMoeda(v.abs, moeda, taxaMxn)}` : formato === "pct" ? `${v.abs >= 0 ? "+" : ""}${(v.abs * 100).toFixed(1)} p.p.` : `${v.abs >= 0 ? "+" : ""}${formato === "int" ? v.abs : new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v.abs)}`}
-            {v.pct != null && ` (${fmtPct(v.pct)})`}
+            {v.pct != null && formato !== "pct" && pctFazSentido(valor ?? 0, anterior) && ` (${fmtPct(v.pct)})`}
             <span className={props.hero ? "" : "text-ink-3"}> vs. anterior</span>
           </span>
         )}

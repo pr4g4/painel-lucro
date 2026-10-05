@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { dadosHoje, semaforoSaldo, coletaFalhando, avaliarAgendadorSeParado, type Semaforo } from "@/lib/hoje";
-import { fmtBRL } from "@/lib/formato";
+import { fmtBRL, fmtUSD, fmtHorasRestantes } from "@/lib/formato";
 
 const COR: Record<Semaforo, string> = { verde: "var(--pos)", amarelo: "var(--warn)", vermelho: "var(--neg)", cinza: "var(--text-3)" };
 
@@ -11,8 +11,8 @@ export async function BarraHoje() {
   const t = d.hoje?.totais;
   const sk = semaforoSaldo(d.kie, coletaFalhando(d.coletas.get("kie"), d.agora));
   const so = semaforoSaldo(d.openai, coletaFalhando(d.coletas.get("openai"), d.agora));
-  const horas = (h: number | null | undefined) => (h == null ? "" : h >= 48 ? ` · ~${(h / 24).toFixed(0)} d` : ` · ~${h.toFixed(1)} h`);
-  const usd = (v: number | null | undefined) => (v == null ? "—" : `US$ ${v.toFixed(2)}`);
+  const horas = (h: number | null | undefined) => (h == null ? "" : ` · ${fmtHorasRestantes(h, true)}`);
+  const usd = (v: number | null | undefined) => fmtUSD(v);
   return (
     <div className="barra-hoje" role="region" aria-label="Hoje">
       <div className="barra-hoje-inner">

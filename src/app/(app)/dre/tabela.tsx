@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import type { LinhaDRE } from "@/lib/calculo";
-import { fmtMoeda, fmtMXN, fmtPct, fmtPctSimples } from "@/lib/formato";
+import { fmtMoeda, fmtMXN, fmtPct, fmtPctSimples, pctFazSentido } from "@/lib/formato";
 
 export type ColunaDRE = { chave: string; rotulo: string; linhas: LinhaDRE[]; receitaLiquida: number };
 
@@ -96,7 +96,7 @@ export function TabelaDRE(props: { atual: ColunaDRE; anterior: ColunaDRE; temBas
                       <td key={c.chave} className="text-right num whitespace-nowrap">
                         <div className={v < 0 && !li.informativo ? "text-neg" : ""}>{money(v)}</div>
                         {verPct && !li.informativo && <div className="text-xs text-ink-3">{pct == null ? "—" : fmtPctSimples(Math.abs(pct))}</div>}
-                        {modo === "intervalos" && mostrarVar && antCol && <div className="text-xs text-ink-3">{fmtPct(antCol.valor ? (v - antCol.valor) / Math.abs(antCol.valor) : null)}</div>}
+                        {modo === "intervalos" && mostrarVar && antCol && <div className="text-xs text-ink-3">{pctFazSentido(v, antCol.valor) ? fmtPct((v - antCol.valor) / Math.abs(antCol.valor)) : `${v - antCol.valor >= 0 ? "+" : ""}${money(v - antCol.valor)}`}</div>}
                       </td>
                     );
                   })}
@@ -105,7 +105,7 @@ export function TabelaDRE(props: { atual: ColunaDRE; anterior: ColunaDRE; temBas
                     const v = achar(props.atual.linhas, li.chave)?.valor ?? 0;
                     if (a == null) return <td className="text-right text-xs text-ink-3">sem base</td>;
                     const d = v - a;
-                    return <td className="text-right num text-xs whitespace-nowrap"><span className={d >= 0 ? "text-pos" : "text-neg"}>{d >= 0 ? "+" : ""}{money(d)} {a ? `(${fmtPct(d / Math.abs(a))})` : ""}</span></td>;
+                    return <td className="text-right num text-xs whitespace-nowrap"><span className={d >= 0 ? "text-pos" : "text-neg"}>{d >= 0 ? "+" : ""}{money(d)} {pctFazSentido(v, a) ? `(${fmtPct(d / Math.abs(a))})` : ""}</span></td>;
                   })()}
                 </tr>
               );

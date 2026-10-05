@@ -1,5 +1,5 @@
 import { variacao } from "@/lib/calculo";
-import { fmtMoeda, fmtPct, type Moeda } from "@/lib/formato";
+import { fmtMoeda, fmtPct, pctFazSentido, type Moeda } from "@/lib/formato";
 
 export type FormatoMetrica = "moeda" | "razao" | "pct" | "int" | "texto";
 
@@ -16,10 +16,11 @@ export function textoMetrica(valor: number | null | undefined, formato: FormatoM
 
 export function textoVariacao(valor: number | null | undefined, anterior: number | null | undefined, temBase: boolean, formato: FormatoMetrica, moeda: Moeda, taxaMxn?: number | null): { texto: string; bom: boolean | null } {
   const v = variacao(valor ?? 0, temBase && anterior != null ? anterior : null);
-  if (v.abs == null) return { texto: "sem base de comparação", bom: null };
+  if (v.abs == null) return { texto: "", bom: null };
   const sinal = v.abs >= 0 ? "+" : "";
   const abs = formato === "moeda" ? fmtMoeda(v.abs, moeda, taxaMxn) : formato === "pct" ? `${(v.abs * 100).toFixed(1)} p.p.` : formato === "int" ? String(v.abs) : new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v.abs);
-  return { texto: `${sinal}${abs}${v.pct != null ? ` (${fmtPct(v.pct)})` : ""} vs. anterior`, bom: v.abs === 0 ? null : v.abs >= 0 };
+  const comPct = v.pct != null && formato !== "pct" && pctFazSentido(valor ?? 0, anterior);
+  return { texto: `${sinal}${abs}${comPct ? ` (${fmtPct(v.pct)})` : ""} vs. anterior`, bom: v.abs === 0 ? null : v.abs >= 0 };
 }
 
 /** Número sem caixa: rótulo pequeno, valor médio, variação embaixo. Cor só no número e na variação. */
@@ -39,7 +40,7 @@ export function Metrica(props: {
       <div className="metrica-s num">
         {props.indisponivel ? <span className="text-warn">dado indisponível: {props.indisponivel}</span>
           : (anterior === undefined || valor == null) && !props.nota ? null
-          : anterior === undefined || valor == null ? props.nota
+          : anterior === undefined || valor == null || !vr.texto ? props.nota
           : <><span className={bom == null ? "" : bom ? "pos" : "neg"}>{vr.texto}</span>{props.nota && <span> · {props.nota}</span>}</>}
       </div>
     </div>

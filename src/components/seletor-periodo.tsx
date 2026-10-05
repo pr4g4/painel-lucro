@@ -9,7 +9,7 @@ const ATALHOS: Atalho[] = ["marco_zero", "hoje", "ultimas_6h", "ultimas_24h", "o
 
 export function SeletorPeriodo(props: {
   atalho: Atalho; deLocal: string; ateLocal: string; tz: string; incluirHistorico: boolean; incluirManuais: boolean; moeda: "BRL" | "MXN";
-  rotuloPeriodo: string; rotuloAnterior: string; gran: "hora" | "dia"; granManual: boolean; podeSalvar: boolean;
+  rotuloPeriodo: string; rotuloAnterior: string; gran: "hora" | "dia"; granManual: boolean; podeSalvar: boolean; semRotulo?: boolean;
 }) {
   const router = useRouter(); const pathname = usePathname(); const sp = useSearchParams();
   const [, start] = useTransition();
@@ -38,7 +38,7 @@ export function SeletorPeriodo(props: {
         </form>
       )}
       <div className="flex items-center justify-between gap-3 mt-1.5">
-        <div className="text-xs text-ink-3 num min-w-0">{props.rotuloPeriodo} · fuso {props.tz === "America/Mexico_City" ? "México" : "Brasília"}<span className="hidden sm:inline"> · vs. anterior {props.rotuloAnterior}</span></div>
+        <div className="text-xs text-ink-3 num min-w-0">{props.semRotulo ? <span className="hidden sm:inline">fuso {props.tz === "America/Mexico_City" ? "México" : "Brasília"}</span> : <>{props.rotuloPeriodo} · fuso {props.tz === "America/Mexico_City" ? "México" : "Brasília"}<span className="hidden sm:inline"> · vs. anterior {props.rotuloAnterior}</span></>}</div>
         <div className="relative shrink-0" ref={popRef}>
           <button type="button" className="btn btn-mini" aria-expanded={opcoes} onClick={() => setOpcoes((v) => !v)}>Opções ▾</button>
           {opcoes && (

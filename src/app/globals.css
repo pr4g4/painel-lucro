@@ -12,7 +12,7 @@
   --border: #d5ddeb;
   --text: #0b1220;
   --text-2: #46546d;
-  --text-3: #7a8699;
+  --text-3: #5b6881; /* 5,6:1 sobre o fundo claro */
   --accent: #2563eb;
   --accent-2: #16a34a;
   --pos: #15803d;
@@ -31,8 +31,8 @@
   --surface-2: #162036;
   --border: #223052;
   --text: #f3f6fb;
-  --text-2: #aab6cc;
-  --text-3: #6f7d99;
+  --text-2: #b4c0d4;
+  --text-3: #93a0b8; /* 7,4:1 sobre o fundo escuro */
   --accent: #3b82f6;
   --accent-2: #22c55e;
   --pos: #34d399;

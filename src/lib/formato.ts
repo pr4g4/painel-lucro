@@ -30,3 +30,22 @@ export function fmtDataHora(d: Date | string | null | undefined, tz: string, pad
 export function fmtHora(d: Date | null | undefined, tz: string): string { return fmtDataHora(d, tz, "HH:mm"); }
 export function fmtRazao(v: number | null | undefined): string { return v == null || !Number.isFinite(v) ? "—" : `${fmtNum(v, 2)}×`; }
 export const ROTULO_TZ: Record<string, string> = { "America/Sao_Paulo": "Brasília", "America/Mexico_City": "México" };
+
+/** Dólar em pt-BR: "US$ 1,51". */
+export function fmtUSD(v: number | null | undefined, casas = 2): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `US$ ${new Intl.NumberFormat("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas }).format(v)}`;
+}
+/** Tempo restante em pt-BR: "~1,5 h" ou "~2,3 dias". */
+export function fmtHorasRestantes(h: number | null | undefined, curto = false): string {
+  if (h == null || !Number.isFinite(h)) return "—";
+  return h >= 48 ? `~${fmtNum(h / 24, curto ? 0 : 1)} ${curto ? "d" : "dias"}` : `~${fmtNum(h, 1)} h`;
+}
+/** Só exibição: o % da variação não faz sentido quando a base é quase zero (|anterior| < 10 ou < 10% do atual) ou quando o sinal troca. */
+export function pctFazSentido(atual: number, anterior: number | null | undefined): boolean {
+  if (anterior == null || anterior === 0) return false;
+  if (Math.abs(anterior) < 10) return false;
+  if (Math.abs(anterior) < 0.1 * Math.abs(atual)) return false;
+  if (atual * anterior < 0) return false;
+  return true;
+}

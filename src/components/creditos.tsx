@@ -1,15 +1,16 @@
 import { carregarCreditos } from "@/coletores/creditos";
 import { alertaSaldo, type SaldoIA } from "@/lib/calculo";
-import { fmtHora } from "@/lib/formato";
+import { fmtHora, fmtUSD, fmtHorasRestantes } from "@/lib/formato";
 import { paraInputLocal } from "@/lib/periodo-url";
 import { FormCreditoOpenAI } from "./creditos-form";
 
-const usd = (v: number | null | undefined, casas = 2) => (v == null || !Number.isFinite(v) ? "—" : `US$ ${v.toFixed(casas)}`);
+const usd = (v: number | null | undefined, casas = 2) => fmtUSD(v, casas);
 
-export async function CartoesCreditos({ tz, agora, edita }: { tz: string; agora: Date; edita: boolean }) {
-  let dados: Awaited<ReturnType<typeof carregarCreditos>> | null = null;
+export type DadosCreditos = Awaited<ReturnType<typeof carregarCreditos>>;
+export async function CartoesCreditos({ tz, agora, edita, dados: pre }: { tz: string; agora: Date; edita: boolean; dados?: DadosCreditos | null }) {
+  let dados: DadosCreditos | null = pre ?? null;
   let erro = "";
-  try { dados = await carregarCreditos(agora, tz); } catch (e) { erro = e instanceof Error ? e.message : String(e); }
+  if (!dados) try { dados = await carregarCreditos(agora, tz); } catch (e) { erro = e instanceof Error ? e.message : String(e); }
   if (!dados) return <div className="card p-3 text-xs text-warn">Créditos das IAs: dado indisponível ({erro}).</div>;
   const { kie, openai, limites } = dados;
   return (
@@ -22,7 +23,7 @@ export async function CartoesCreditos({ tz, agora, edita }: { tz: string; agora:
 
 function Cartao({ s, titulo, tz, limites, rodape }: { s: SaldoIA; titulo: string; tz: string; limites: { horas: number; usd: number }; rodape?: React.ReactNode }) {
   const alerta = alertaSaldo(s, limites);
-  const horas = s.horasRestantes == null ? "—" : s.horasRestantes >= 48 ? `~${(s.horasRestantes / 24).toFixed(1)} dias` : `~${s.horasRestantes.toFixed(1)} h`;
+  const horas = fmtHorasRestantes(s.horasRestantes);
   return (
     <div className={`card p-3 md:p-4 ${alerta ? "border-neg" : ""}`} style={alerta ? { borderColor: "var(--neg)" } : undefined}>
       <div className="flex items-baseline justify-between gap-2">
