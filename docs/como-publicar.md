@@ -74,6 +74,12 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
   7. Se algum evento do webhook falhar por falta de câmbio (fim de semana sem PTAX), ele é reprocessado sozinho na próxima coleta de câmbio (a cada 10 min). Para forçar agora e ver os números, abra logado: `https://SEU-SITE.vercel.app/api/zenith/reprocessar?cambio=1` (mostra quantas taxas PTAX há por moeda, a data da última e o que foi reprocessado).
   Regra: a mesma venda pode chegar como `deposit.credited` e também `payment.captured`/`checkout.succeeded`; o app conta a receita **uma vez por `referenceId`** (sem referenceId, por `data.id`). Reembolso entra como linha negativa na data do reembolso. Reserva retida = 10% do bruto (parâmetro).
 
+## Como o painel é organizado (depois do visual novo)
+- **Barra "Hoje"** fixa no topo de todas as telas: lucro, receita, Meta, IA e saldos das IAs de hoje. Cada item leva para a tela certa.
+- **Painel**: o número grande é o lucro líquido do período escolhido; abaixo, 4 números-chave; depois, seções que abrem com um toque (ficam fechadas até você abrir; o navegador lembra).
+- **Opções ▾** (ao lado da linha do período): fuso, moeda, gráfico por hora/dia, incluir histórico/manuais, copiar link e salvar visão.
+- Prints de como deve ficar: pasta `docs/prints/`.
+
 ## Se algo der errado
 - Site abre mas dá erro 500: quase sempre `DATABASE_URL` errada (senha ou `[YOUR-PASSWORD]` não trocado). Corrija em Settings → Environment Variables → Redeploy.
 - "Fonte X não configurada" em Avisos: falta a chave daquela fonte; normal até você colar.

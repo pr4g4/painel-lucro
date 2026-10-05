@@ -58,3 +58,11 @@ Alternativa pela API do ZapData: `WHATSAPP_PROVEDOR=zapdata`, `ZAPDATA_ALERTA_UR
 ## Observações do ambiente desta noite
 - O container onde desenvolvi bloqueia saída para Banco Central (PTAX), Meta e OpenAI; as chamadas reais só puderam ser escritas, não executadas. Primeira coleta real acontece na Vercel.
 - Senhas iniciais do banco local de desenvolvimento: só existem no `.env.local` deste container (não commitado). Em produção, as senhas vêm de `SEED_SENHA_ERICK` / `SEED_SENHA_IAN` e podem ser trocadas na tela Parâmetros.
+
+## Visual novo (fase 3, 05/10 de madrugada) — o que mudou e o que conferir
+- Painel: um destaque só (Lucro líquido do período, com comparação e minilinha), fileira de 4 números (Receita líquida, Meta c/ imposto, IA, Nº de vendas) e o resto em seções recolhíveis (Indicadores, Custos detalhados, Vendas e pendentes, Por número de WhatsApp, Gráficos, Projeção e ponto de equilíbrio, Créditos das IAs, Fontes e atualização). As seções lembram se ficaram abertas ou fechadas neste navegador.
+- Seletor de período: só as fichas de período; fuso, moeda, gráfico por hora/dia, histórico, manuais, copiar link e salvar visão ficaram no botão **Opções ▾** (à direita da linha do período).
+- DRE: cabeçalho da tabela fica fixo ao rolar; a coluna "vs. anterior" some quando não há base de comparação.
+- Prints de referência em `docs/prints/` (painel, DRE e campanhas; computador e celular; claro e escuro).
+- Nenhum cálculo mudou: o lucro do painel continua igual ao da DRE ao centavo (teste automático confere).
+- Conferir no iPhone real: abrir/fechar seções, botão Opções e a barra "Hoje" fixa sob o cabeçalho.

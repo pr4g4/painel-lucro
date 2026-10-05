@@ -13,6 +13,7 @@ export function TabelaDRE(props: { atual: ColunaDRE; anterior: ColunaDRE; temBas
   const [ocultas, setOcultas] = useState<Record<string, boolean>>({});
 
   const colunas = modo === "total" ? [props.atual] : props.intervalos;
+  const mostrarVar = verVar && props.temBase; // sem base de comparação, a coluna "vs. anterior" não existe
   const linhasBase = props.atual.linhas;
   const money = (v: number) => fmtMoeda(v, props.moeda, props.taxaMxn);
   const anteriorPor = useMemo(() => new Map(props.anterior.linhas.flatMap((l) => [[l.chave, l], ...(l.filhos ?? []).map((f) => [f.chave, f] as const)] as const)), [props.anterior]);
@@ -30,12 +31,12 @@ export function TabelaDRE(props: { atual: ColunaDRE; anterior: ColunaDRE; temBas
   }
 
   return (
-    <div className="card p-3 flex flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <button type="button" className="chip" data-ativo={modo === "total"} onClick={() => setModo("total")}>Total do período</button>
         <button type="button" className="chip" data-ativo={modo === "intervalos"} onClick={() => setModo("intervalos")}>Analisar por intervalo ({props.rotuloIntervalo}, {props.intervalos.length} colunas)</button>
         <label className="flex items-center gap-1 ml-auto"><input type="checkbox" checked={verPct} onChange={(e) => setVerPct(e.target.checked)} />% da receita líq.</label>
-        <label className="flex items-center gap-1"><input type="checkbox" checked={verVar} onChange={(e) => setVerVar(e.target.checked)} />variação</label>
+        {props.temBase ? <label className="flex items-center gap-1"><input type="checkbox" checked={verVar} onChange={(e) => setVerVar(e.target.checked)} />variação</label> : <span className="text-xs text-ink-3">sem base de comparação</span>}
         <details className="relative">
           <summary className="btn cursor-pointer list-none">Colunas (linhas visíveis)</summary>
           <div className="absolute right-0 mt-1 card p-2 z-10 w-64 max-h-64 overflow-auto text-xs flex flex-col gap-1">
@@ -58,20 +59,20 @@ export function TabelaDRE(props: { atual: ColunaDRE; anterior: ColunaDRE; temBas
               </div>
               <div className="text-right num shrink-0">
                 <div className={l.valor < 0 && !l.informativo ? "neg" : ""}>{money(l.valor)}</div>
-                <div className="text-xs text-ink-3">{verPct && !l.informativo && pct != null ? fmtPctSimples(Math.abs(pct)) : ""}{verVar && d != null ? <span className={d >= 0 ? " pos" : " neg"}> {d >= 0 ? "+" : ""}{money(d)}</span> : ""}</div>
+                <div className="text-xs text-ink-3">{verPct && !l.informativo && pct != null ? fmtPctSimples(Math.abs(pct)) : ""}{mostrarVar && d != null ? <span className={d >= 0 ? " pos" : " neg"}> {d >= 0 ? "+" : ""}{money(d)}</span> : ""}</div>
               </div>
             </div>
           );
         })}
         {modo === "intervalos" && <p className="text-xs text-ink-3 mt-2">Colunas por intervalo: gire o celular ou use o computador.</p>}
       </div>
-      <div className="overflow-x-auto hidden md:block">
-        <table className="tab">
+      <div className={`hidden md:block ${modo === "intervalos" ? "overflow-x-auto" : ""}`}>
+        <table className={`tab ${modo === "total" ? "tab-fixa" : ""}`}>
           <thead>
             <tr>
               <th className="sticky left-0 bg-surface">Linha</th>
               {colunas.map((c) => <th key={c.chave} className="text-right">{c.rotulo}</th>)}
-              {modo === "total" && verVar && <th className="text-right">vs. anterior</th>}
+              {modo === "total" && mostrarVar && <th className="text-right">vs. anterior</th>}
             </tr>
           </thead>
           <tbody>
@@ -95,11 +96,11 @@ export function TabelaDRE(props: { atual: ColunaDRE; anterior: ColunaDRE; temBas
                       <td key={c.chave} className="text-right num whitespace-nowrap">
                         <div className={v < 0 && !li.informativo ? "text-neg" : ""}>{money(v)}</div>
                         {verPct && !li.informativo && <div className="text-xs text-ink-3">{pct == null ? "—" : fmtPctSimples(Math.abs(pct))}</div>}
-                        {modo === "intervalos" && verVar && antCol && <div className="text-xs text-ink-3">{fmtPct(antCol.valor ? (v - antCol.valor) / Math.abs(antCol.valor) : null)}</div>}
+                        {modo === "intervalos" && mostrarVar && antCol && <div className="text-xs text-ink-3">{fmtPct(antCol.valor ? (v - antCol.valor) / Math.abs(antCol.valor) : null)}</div>}
                       </td>
                     );
                   })}
-                  {modo === "total" && verVar && (() => {
+                  {modo === "total" && mostrarVar && (() => {
                     const a = props.temBase ? anteriorPor.get(li.chave)?.valor ?? null : null;
                     const v = achar(props.atual.linhas, li.chave)?.valor ?? 0;
                     if (a == null) return <td className="text-right text-xs text-ink-3">sem base</td>;

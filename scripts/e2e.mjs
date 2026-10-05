@@ -18,7 +18,7 @@ await p.screenshot({ path: `${OUT}/dre.png`, fullPage: true });
 
 await p.goto("http://localhost:3000/"); await p.waitForSelector("text=Lucro líquido");
 await p.screenshot({ path: `${OUT}/painel.png`, fullPage: true });
-const lucroPainel = await p.locator("section:has(h2:has-text('Período selecionado')) .card").first().locator(".num").first().textContent();
+const lucroPainel = await p.locator(".hero .hero-v").textContent();
 await p.goto("http://localhost:3000/dre");
 const lucroDre = await p.locator("h1 span").textContent();
 console.log("lucro painel:", lucroPainel, "| dre:", lucroDre);
@@ -33,12 +33,12 @@ for (const rota of ["campanhas", "manuais", "venda-manual", "custos", "lancament
   await p.screenshot({ path: `${OUT}/${rota}.png`, fullPage: rota !== "lancamentos" });
 }
 // cria lançamento manual e confere que aparece no painel sem coleta
-await p.goto("http://localhost:3000/manuais?p=hoje");
+await p.goto("http://localhost:3000/manuais?p=hoje"); await p.waitForLoadState("networkidle");
 await p.fill("input[name=valor]", "37,50"); await p.fill("input[name=descricao]", "TESTE e2e avulso"); await p.click("button:has-text('Adicionar')");
 await p.waitForSelector("text=TESTE e2e avulso"); console.log("manual criado ok");
 await p.goto("http://localhost:3000/lancamentos?p=hoje&fonte=manual"); console.log("no ledger:", await p.locator("text=TESTE e2e avulso").count());
 // venda manual
-await p.goto("http://localhost:3000/venda-manual?p=hoje");
+await p.goto("http://localhost:3000/venda-manual?p=hoje"); await p.waitForLoadState("networkidle");
 await p.fill("input[name=bruto]", "149"); await p.fill("input[name=produto]", "Fotos IA 149 (manual)"); await p.click("button:has-text('Registrar venda')");
 await p.waitForSelector("text=Fotos IA 149 (manual)"); console.log("venda manual ok");
 // parâmetro nova vigência

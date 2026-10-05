@@ -1,19 +1,20 @@
 import { contextoPeriodo } from "@/lib/contexto";
-import { resolverAtalho, periodoAnterior } from "@/lib/calculo";
+import { resolverAtalho } from "@/lib/calculo";
 import { dreFatiada } from "@/lib/fatias";
 import { Suspense } from "react";
 import { SeletorPeriodo } from "@/components/seletor-periodo";
-import { Cartao } from "@/components/cartao";
+import { Metrica, textoVariacao } from "@/components/metrica";
+import { Secao } from "@/components/secao";
+import { Sparkline } from "@/components/sparkline";
 import { Grafico } from "@/components/grafico";
 import { BotaoAtualizar } from "@/components/atualizar";
 import { VisoesSalvas } from "@/components/visoes";
-import { BlocoOperacao } from "@/components/operacao";
+import { FaltaEmpatar, Projecao, GastoPorHora, TabelaNumeros } from "@/components/operacao";
 import { CartoesCreditos } from "@/components/creditos";
 import { fmtHora, fmtMoeda, fmtMXN } from "@/lib/formato";
 import { ROTULO_FONTE } from "@/coletores";
 import { ultimaTaxaMxnInfo, ROTULO_FONTE_CAMBIO } from "@/coletores/cambio";
 import type { Params } from "@/lib/periodo-url";
-import type { ResultadoDRE } from "@/lib/calculo";
 
 export const dynamic = "force-dynamic";
 
@@ -22,80 +23,129 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   const ctx = await contextoPeriodo(sp);
   const { estado, atual, anterior, temBaseAnterior, coletas, taxaMxn } = ctx;
   const hojeP = resolverAtalho("hoje", estado.agora, estado.marcoZero, estado.tz).periodo;
-  const hojeAnt = periodoAnterior(hojeP, estado.tz);
-  const hoje = { atual: ctx.calc(hojeP), anterior: ctx.calc(hojeAnt), temBaseAnterior: ctx.temDados(hojeAnt) };
+  const hoje = ctx.calc(hojeP);
   const fatias = dreFatiada(ctx.entrada, estado.periodo, estado.gran, estado.tz);
   const taxaMxnInfo = await ultimaTaxaMxnInfo().catch(() => null);
   const mesBruto = resolverAtalho("mes_atual", estado.agora, estado.marcoZero, estado.tz).periodo;
   const mesP = { inicio: new Date(Math.max(mesBruto.inicio.getTime(), estado.marcoZero.getTime())), fim: mesBruto.fim }; // mesma base do "desde o marco zero"
   const mes = ctx.calc(mesP);
 
+  const t = atual.totais, a = anterior.totais, i = atual.indicadores, ia = anterior.indicadores;
+  const d = { moeda: estado.moeda, taxaMxn };
+  const money = (v: number | null | undefined) => fmtMoeda(v, estado.moeda, taxaMxn);
+  const base = { ...d, temBase: temBaseAnterior };
   const dadosGrafico = fatias.map((f) => ({ rotulo: f.rotulo, receita: f.dre.totais.receitaLiquida, meta: f.dre.totais.metaComImposto, zapdata: f.dre.totais.zapdata, ia: f.dre.totais.ia, operacao: f.dre.totais.operacao, lucro: f.dre.totais.lucroLiquido }));
+  const serieLucro = fatias.map((f) => f.dre.totais.lucroLiquido);
+  const varLucro = textoVariacao(t.lucroLiquido, a.lucroLiquido, temBaseAnterior, "moeda", estado.moeda, taxaMxn);
   const atrasadas = [...coletas.entries()].filter(([f, c]) => f !== "zenith" && !c.naoConfigurada && (!c.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000));
+  const query = new URLSearchParams(Object.entries(sp).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : []))).toString();
+  const cCambio = coletas.get("cambio"); const agendadorHa = cCambio ? Math.round((estado.agora.getTime() - cCambio.ultima.getTime()) / 60_000) : null;
 
   return (
     <>
-      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
-      {ctx.problemas.length > 0 && <div className="card p-2 text-xs text-warn border-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
-      <CartoesCreditos tz={estado.tz} agora={estado.agora} edita={ctx.sessao.papel === "edita"} />
+      <Suspense fallback={<div className="h-12 skeleton" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <VisoesSalvas />
-      <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2">
-        <span>Atualizado:</span>
-        {["meta", "zenith", "cambio", "openai", "kie"].map((f) => {
-          const c = coletas.get(f);
-          const atras = !c?.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000;
-          let texto = c?.naoConfigurada ? `sem chave (tentou ${fmtHora(c.ultima, estado.tz)})` : c?.ultimaOk ? fmtHora(c.ultimaOk, estado.tz) : c ? `falhou ${fmtHora(c.ultima, estado.tz)}` : "nunca";
-          if (f === "cambio") texto += taxaMxnInfo ? ` · MXN ${taxaMxnInfo.taxa.toFixed(4)} (${ROTULO_FONTE_CAMBIO[taxaMxnInfo.fonte] ?? taxaMxnInfo.fonte}, ${taxaMxnInfo.dia.slice(8, 10)}/${taxaMxnInfo.dia.slice(5, 7)})` : " · sem taxa MXN";
-          return <span key={f} className={`px-2 py-0.5 rounded-full border border-border ${atras && f !== "zenith" && !c?.naoConfigurada ? "text-warn" : c?.naoConfigurada ? "text-ink-3" : ""}`} title={c?.erro ?? ""}>{ROTULO_FONTE[f]} {texto}{f === "zenith" && !c?.ultimaOk ? " (webhook/CSV)" : ""}</span>;
-        })}
-        {(() => { const c = coletas.get("cambio"); const ha = c ? Math.round((estado.agora.getTime() - c.ultima.getTime()) / 60_000) : null; return <span className={`px-2 py-0.5 rounded-full border border-border ${ha == null || ha > 15 ? "text-warn" : "text-pos"}`} title="O agendador (pg_cron) chama a coleta a cada 10 min; o câmbio roda sempre, então ele é o batimento.">agendador: {ha == null ? "nunca rodou" : `há ${ha} min`}</span>; })()}
-        <BotaoAtualizar />
-        {atrasadas.length > 0 && <span className="text-warn">⚠ {atrasadas.length} fonte(s) desatualizada(s) há mais de 30 min; mantendo o último valor bom.</span>}
-      </div>
+      {ctx.problemas.length > 0 && <div className="text-xs text-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
 
-      <Bloco titulo="Hoje" sub="vs. ontem até a mesma hora" dre={hoje.atual} ant={hoje.anterior} temBase={hoje.temBaseAnterior} moeda={estado.moeda} taxaMxn={taxaMxn} />
-      <BlocoOperacao hoje={hoje.atual} mes={mes} agora={estado.agora} tz={estado.tz} marcoZero={estado.marcoZero} moeda={estado.moeda} taxaMxn={taxaMxn} lancamentos={ctx.entrada.lancamentos} periodo={estado.periodo} params={ctx.params} incluirHistorico={estado.incluirHistorico} rotuloPeriodo={ctx.propsSeletor.rotuloPeriodo} />
-      <Bloco titulo="Período selecionado" sub={ctx.propsSeletor.rotuloPeriodo} dre={atual} ant={anterior} temBase={temBaseAnterior} moeda={estado.moeda} taxaMxn={taxaMxn} />
+      {/* destaque principal */}
+      <section className="hero" aria-label="Lucro líquido do período">
+        <div className="min-w-0">
+          <div className="hero-k">Lucro líquido do período <span className="text-ink-3">· {ctx.propsSeletor.rotuloPeriodo}</span></div>
+          <div className={`hero-v num ${t.lucroLiquido < 0 ? "neg" : t.lucroLiquido > 0 ? "pos" : ""}`}>{money(t.lucroLiquido)}</div>
+          <div className="hero-sub num">
+            <span className={varLucro.bom == null ? "" : varLucro.bom ? "pos" : "neg"}>{varLucro.texto}{varLucro.bom != null && <span className="text-ink-3"> ({ctx.propsSeletor.rotuloAnterior})</span>}</span>
+            <span>metade para cada sócio {money(t.porSocio)}</span>
+          </div>
+        </div>
+        <div className="hero-lado">
+          <Sparkline valores={serieLucro} largura={200} altura={48} />
+          <span>lucro líquido por {estado.gran} · {fatias.length} pontos</span>
+        </div>
+      </section>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <Cartao rotulo="Reserva retida na Zenith (só venda nova)" valor={atual.totais.reservaRetida} temBase={false} moeda={estado.moeda} taxaMxn={taxaMxn} nota="não é custo" />
-        <Cartao rotulo={`Vendas pendentes (${atual.totais.pendentesQtd})`} valor={atual.totais.pendentesValor} temBase={false} moeda={estado.moeda} taxaMxn={taxaMxn} nota="fora da receita" />
-        <Cartao rotulo="Ponto de equilíbrio (falta de receita líq.)" valor={atual.indicadores.pontoEquilibrio} temBase={false} moeda={estado.moeda} taxaMxn={taxaMxn} />
-        <Cartao rotulo="Receita bruta em MX$" texto={fmtMXN(atual.totais.receitaBrutaMxn)} valor={atual.totais.receitaBrutaMxn} anterior={anterior.totais.receitaBrutaMxn} temBase={temBaseAnterior} formato="texto" />
-      </div>
+      {/* quatro números secundários, sem caixas */}
+      <section className="secundarios" aria-label="Números do período">
+        <Metrica rotulo="Receita líquida" valor={t.receitaLiquida} anterior={a.receitaLiquida} {...base} />
+        <Metrica rotulo="Meta com imposto" valor={t.metaComImposto} anterior={a.metaComImposto} inverterSinal {...base} />
+        <Metrica rotulo="IA (kie.ai + OpenAI)" valor={t.ia} anterior={a.ia} inverterSinal {...base} />
+        <Metrica rotulo="Nº de vendas" valor={t.numVendas} anterior={a.numVendas} formato="int" temBase={temBaseAnterior} />
+      </section>
 
-      <Grafico dados={dadosGrafico} titulo={`Receita líquida × custos empilhados + lucro líquido (por ${estado.gran})`} />
-      {estado.moeda === "MXN" && <p className="text-xs text-ink-3">Valores em MX$ convertidos de BRL pela última taxa MXN→BRL conhecida ({taxaMxn?.toFixed(4) ?? "—"}). Gráfico permanece em R$.</p>}
+      <Secao id="indicadores" titulo="Indicadores" resumo={`margem ${i.margemLiquida == null ? "—" : `${(i.margemLiquida * 100).toFixed(1)}%`} · ROAS ${i.roas == null ? "—" : `${i.roas.toFixed(2)}×`}`}>
+        <div className="grade-metricas">
+          <Metrica rotulo="Lucro bruto" valor={t.lucroBruto} anterior={a.lucroBruto} colorir {...base} />
+          <Metrica rotulo="Margem líquida" valor={i.margemLiquida} anterior={ia.margemLiquida} formato="pct" temBase={temBaseAnterior} />
+          <Metrica rotulo="Ticket médio líquido" valor={i.ticketMedioLiquido} anterior={ia.ticketMedioLiquido} {...base} />
+          <Metrica rotulo="Custo por venda" valor={i.custoPorVenda} anterior={ia.custoPorVenda} inverterSinal {...base} />
+          <Metrica rotulo="ROAS" valor={i.roas} anterior={ia.roas} formato="razao" temBase={temBaseAnterior} nota={i.roas == null ? "sem receita no período" : undefined} />
+          <Metrica rotulo="POAS" valor={i.poas} anterior={ia.poas} formato="razao" temBase={temBaseAnterior} nota={i.poas == null ? "sem receita no período" : undefined} />
+          <Metrica rotulo="Metade para cada sócio" valor={t.porSocio} anterior={a.porSocio} colorir {...base} />
+          <Metrica rotulo="Imposto sobre lucro" valor={t.impostoLucro} anterior={a.impostoLucro} inverterSinal {...base} />
+        </div>
+      </Secao>
+
+      <Secao id="custos" titulo="Custos detalhados" resumo={`total ${money(t.metaComImposto + t.zapdata + t.ia + t.operacao)}`}>
+        <div className="grade-metricas">
+          <Metrica rotulo="Meta com imposto" valor={t.metaComImposto} anterior={a.metaComImposto} inverterSinal {...base} />
+          <Metrica rotulo="ZapData" valor={t.zapdata} anterior={a.zapdata} inverterSinal {...base} />
+          <Metrica rotulo="IA (kie.ai + OpenAI)" valor={t.ia} anterior={a.ia} inverterSinal {...base} />
+          <Metrica rotulo="Operação" valor={t.operacao} anterior={a.operacao} inverterSinal {...base} />
+          <Metrica rotulo="Imposto sobre lucro" valor={t.impostoLucro} anterior={a.impostoLucro} inverterSinal {...base} />
+          <Metrica rotulo="Reserva retida na Zenith" valor={t.reservaRetida} nota="não é custo · só venda nova" {...d} />
+        </div>
+        <p className="text-xs text-ink-3">Detalhe linha a linha na <a className="underline" href={`/dre?${query}`}>DRE</a> e por tipo em <a className="underline" href={`/custos?${query}`}>Custos por tipo</a>.</p>
+      </Secao>
+
+      <Secao id="vendas" titulo="Vendas e pendentes" resumo={`${t.numVendas} venda(s) · ${t.pendentesQtd} pendente(s)`}>
+        <div className="grade-metricas">
+          <Metrica rotulo="Nº de vendas" valor={t.numVendas} anterior={a.numVendas} formato="int" temBase={temBaseAnterior} />
+          <Metrica rotulo="Receita bruta em MX$" texto={fmtMXN(t.receitaBrutaMxn)} valor={t.receitaBrutaMxn} anterior={a.receitaBrutaMxn} temBase={temBaseAnterior} formato="texto" />
+          <Metrica rotulo="Receita líquida" valor={t.receitaLiquida} anterior={a.receitaLiquida} {...base} />
+          <Metrica rotulo={`Vendas pendentes (${t.pendentesQtd})`} valor={t.pendentesValor} nota="fora da receita até aprovar" {...d} />
+          <Metrica rotulo="Reserva retida na Zenith" valor={t.reservaRetida} nota="não é custo" {...d} />
+          <Metrica rotulo="Ticket médio líquido" valor={i.ticketMedioLiquido} anterior={ia.ticketMedioLiquido} {...base} />
+        </div>
+      </Secao>
+
+      <Secao id="numeros" titulo="Por número de WhatsApp">
+        <TabelaNumeros lancamentos={ctx.entrada.lancamentos} periodo={estado.periodo} params={ctx.params} incluirHistorico={estado.incluirHistorico} {...d} />
+      </Secao>
+
+      <Secao id="graficos" titulo="Gráficos">
+        <Grafico dados={dadosGrafico} titulo={`Receita líquida × custos empilhados + lucro líquido (por ${estado.gran})`} />
+        <GastoPorHora lancamentos={ctx.entrada.lancamentos} periodo={estado.periodo} tz={estado.tz} params={ctx.params} incluirHistorico={estado.incluirHistorico} rotuloPeriodo={ctx.propsSeletor.rotuloPeriodo} {...d} />
+        {estado.moeda === "MXN" && <p className="text-xs text-ink-3">Valores em MX$ convertidos de BRL pela última taxa MXN→BRL conhecida ({taxaMxn?.toFixed(4) ?? "—"}). Gráficos permanecem em R$.</p>}
+      </Secao>
+
+      <Secao id="projecao" titulo="Projeção e ponto de equilíbrio">
+        <div className="grade-metricas">
+          <FaltaEmpatar hoje={hoje} {...d} />
+          <Projecao mes={mes} agora={estado.agora} tz={estado.tz} marcoZero={estado.marcoZero} {...d} />
+          <Metrica rotulo="Ponto de equilíbrio do período" valor={i.pontoEquilibrio} nota="receita líquida que falta para lucro bruto zero" {...d} />
+          <Metrica rotulo="Lucro líquido no mês (desde o marco zero)" valor={mes.totais.lucroLiquido} colorir {...d} />
+        </div>
+      </Secao>
+
+      <Secao id="creditos" titulo="Créditos das IAs">
+        <CartoesCreditos tz={estado.tz} agora={estado.agora} edita={ctx.sessao.papel === "edita"} />
+      </Secao>
+
+      <Secao id="fontes" titulo="Fontes e atualização" resumo={agendadorHa == null ? "agendador nunca rodou" : `agendador há ${agendadorHa} min${atrasadas.length ? ` · ${atrasadas.length} fonte(s) atrasada(s)` : ""}`}>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2">
+          {["meta", "zenith", "cambio", "openai", "kie"].map((f) => {
+            const c = coletas.get(f);
+            const atras = !c?.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000;
+            let texto = c?.naoConfigurada ? `sem chave (tentou ${fmtHora(c.ultima, estado.tz)})` : c?.ultimaOk ? fmtHora(c.ultimaOk, estado.tz) : c ? `falhou ${fmtHora(c.ultima, estado.tz)}` : "nunca";
+            if (f === "cambio") texto += taxaMxnInfo ? ` · MXN ${taxaMxnInfo.taxa.toFixed(4)} (${ROTULO_FONTE_CAMBIO[taxaMxnInfo.fonte] ?? taxaMxnInfo.fonte}, ${taxaMxnInfo.dia.slice(8, 10)}/${taxaMxnInfo.dia.slice(5, 7)})` : " · sem taxa MXN";
+            return <span key={f} className={`px-2 py-0.5 rounded-full border border-border num ${atras && f !== "zenith" && !c?.naoConfigurada ? "text-warn" : c?.naoConfigurada ? "text-ink-3" : ""}`} title={c?.erro ?? ""}>{ROTULO_FONTE[f]} {texto}{f === "zenith" && !c?.ultimaOk ? " (webhook/CSV)" : ""}</span>;
+          })}
+          <span className={`px-2 py-0.5 rounded-full border border-border ${agendadorHa == null || agendadorHa > 15 ? "text-warn" : "text-pos"}`} title="O agendador (pg_cron) chama a coleta a cada 10 min; o câmbio roda sempre, então ele é o batimento.">agendador: {agendadorHa == null ? "nunca rodou" : `há ${agendadorHa} min`}</span>
+          <BotaoAtualizar />
+          {atrasadas.length > 0 && <span className="text-warn">⚠ {atrasadas.length} fonte(s) desatualizada(s) há mais de 30 min; mantendo o último valor bom.</span>}
+        </div>
+      </Secao>
+
       {atual.avisos.length > 0 && <ul className="text-xs text-warn list-disc pl-5">{atual.avisos.map((a, i) => <li key={i}>{a}</li>)}</ul>}
     </>
   );
 }
-
-function Bloco({ titulo, sub, dre, ant, temBase, moeda, taxaMxn }: { titulo: string; sub: string; dre: ResultadoDRE; ant: ResultadoDRE; temBase: boolean; moeda: "BRL" | "MXN"; taxaMxn: number | null }) {
-  const t = dre.totais, a = ant.totais, i = dre.indicadores, ia = ant.indicadores;
-  const m = { moeda, taxaMxn, temBase };
-  return (
-    <section className="flex flex-col gap-2">
-      <h2 className="font-semibold">{titulo} <span className="text-xs text-ink-3 font-normal">{sub}</span></h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        <div className="col-span-2 sm:col-span-3 lg:col-span-2"><Cartao rotulo="Lucro líquido" valor={t.lucroLiquido} anterior={a.lucroLiquido} hero {...m} /></div>
-        <Cartao rotulo="Metade para cada sócio" valor={t.porSocio} anterior={a.porSocio} destaque {...m} />
-        <Cartao rotulo="Receita líquida" valor={t.receitaLiquida} anterior={a.receitaLiquida} {...m} />
-        <Cartao rotulo="Lucro bruto" valor={t.lucroBruto} anterior={a.lucroBruto} {...m} />
-        <Cartao rotulo="Imposto sobre lucro" valor={t.impostoLucro} anterior={a.impostoLucro} inverterSinal {...m} />
-        <Cartao rotulo="Nº de vendas" valor={t.numVendas} anterior={a.numVendas} formato="int" temBase={temBase} />
-        <Cartao rotulo="Meta com imposto" valor={t.metaComImposto} anterior={a.metaComImposto} inverterSinal {...m} />
-        <Cartao rotulo="ZapData" valor={t.zapdata} anterior={a.zapdata} inverterSinal {...m} />
-        <Cartao rotulo="IA (kie.ai + OpenAI)" valor={t.ia} anterior={a.ia} inverterSinal {...m} />
-        <Cartao rotulo="Operação" valor={t.operacao} anterior={a.operacao} inverterSinal {...m} />
-        <Cartao rotulo="Ticket médio líquido" valor={i.ticketMedioLiquido} anterior={ia.ticketMedioLiquido} {...m} />
-        <Cartao rotulo="Custo por venda" valor={i.custoPorVenda} anterior={ia.custoPorVenda} inverterSinal {...m} />
-        <Cartao rotulo="ROAS" valor={i.roas} anterior={ia.roas} formato="razao" temBase={temBase} />
-        <Cartao rotulo="POAS" valor={i.poas} anterior={ia.poas} formato="razao" temBase={temBase} />
-        <Cartao rotulo="Margem líquida" valor={i.margemLiquida} anterior={ia.margemLiquida} formato="pct" temBase={temBase} />
-      </div>
-    </section>
-  );
-}
-
-export const _f = fmtMoeda;
