@@ -11,16 +11,29 @@ await p.waitForURL("http://localhost:3000/"); await p.waitForLoadState("networki
 let falhas = 0;
 const chk = (nome, ok, extra = "") => { console.log(`${ok ? "OK " : "FALHA"} ${nome} ${extra}`); if (!ok) falhas++; };
 
-// menu: abrir gaveta e tocar em CADA link
-const rotas = [["Resumo", "/resumo"], ["DRE", "/dre"], ["Campanhas", "/campanhas"], ["Lançamentos manuais", "/manuais"], ["Venda manual", "/venda-manual"], ["Custos por tipo", "/custos"], ["Lançamentos", "/lancamentos"], ["Por produto", "/produtos"], ["Avisos", "/avisos"], ["Parâmetros", "/parametros"], ["Painel", "/"]];
-for (const [rotulo, rota] of rotas) {
-  await p.tap("button[aria-label='Abrir menu']");
-  await p.waitForSelector(".gaveta", { timeout: 3000 });
-  await p.locator(`.gaveta a.nav-item:text-is("${rotulo}")`).tap();
+// menu: barra inferior + folhas; tocar em CADA destino
+const viaFolha = async (grupo, rotulo, rota) => {
+  await p.locator(`.barra-inferior button:has-text("${grupo}")`).tap();
+  await p.waitForSelector(".folha", { timeout: 3000 });
+  await p.locator(`.folha a.nav-sub:text-is("${rotulo}")`).tap();
   await p.waitForTimeout(900);
-  chk(`menu → ${rotulo}`, new URL(p.url()).pathname === rota, p.url());
-  chk("gaveta fechou", (await p.locator(".gaveta").count()) === 0);
-}
+  chk(`menu ${grupo} → ${rotulo}`, new URL(p.url()).pathname === rota, p.url());
+  chk("folha fechou", (await p.locator(".folha").count()) === 0);
+};
+await viaFolha("Visão geral", "Resumo (simples)", "/resumo");
+await viaFolha("Resultados", "DRE", "/dre");
+await viaFolha("Resultados", "Custos por tipo", "/custos");
+await viaFolha("Resultados", "Por produto", "/produtos");
+await p.locator('.barra-inferior a:has-text("Campanhas")').tap(); await p.waitForTimeout(900); chk("menu Campanhas", new URL(p.url()).pathname === "/campanhas", p.url());
+await viaFolha("Mais", "Lançamentos", "/lancamentos");
+await viaFolha("Mais", "Lançamentos manuais", "/manuais");
+await viaFolha("Mais", "Venda manual", "/venda-manual");
+await viaFolha("Mais", "Importar CSV", "/importar");
+await viaFolha("Mais", "Avisos", "/avisos");
+await viaFolha("Mais", "Parâmetros", "/parametros");
+await viaFolha("Visão geral", "Painel", "/");
+// barra "Hoje": itens clicáveis
+await p.locator(".barra-hoje a").nth(1).tap(); await p.waitForTimeout(900); chk("barra Hoje → DRE", p.url().includes("/dre"), p.url());
 // atalhos de período: tocar em cada chip
 await p.goto("http://localhost:3000/"); await p.waitForLoadState("networkidle");
 for (const [rotulo, q] of [["Hoje", "p=hoje"], ["Últimas 6 h", "p=ultimas_6h"], ["Últimas 24 h", "p=ultimas_24h"], ["Ontem", "p=ontem"], ["7 dias", "p=7_dias"], ["Mês atual", "p=mes_atual"], ["Tudo (com histórico)", "p=tudo"], ["Desde o marco zero", "p=marco_zero"]]) {
@@ -33,9 +46,9 @@ await p.locator("button.chip:text-is('Personalizado')").tap(); await p.fill("inp
 chk("personalizado", p.url().includes("de=2026-10-03T00%3A00") || p.url().includes("de=2026-10-03T00:00"), p.url());
 // tema, atualizar, sair
 const t0 = await p.evaluate(() => document.documentElement.dataset.theme);
-await p.tap("button[aria-label='Abrir menu']"); await p.locator(".gaveta button[aria-label='Alternar tema']").tap(); await p.waitForTimeout(300);
+await p.locator('.barra-inferior button:has-text("Mais")').tap(); await p.locator(".folha button[aria-label='Alternar tema']").tap(); await p.waitForTimeout(300);
 chk("tema alterna", (await p.evaluate(() => document.documentElement.dataset.theme)) !== t0);
-await p.locator(".gaveta button:has-text('Sair')").tap(); await p.waitForTimeout(1500);
+await p.locator(".folha button:has-text('Sair')").tap(); await p.waitForTimeout(1500);
 chk("sair", p.url().includes("/login"), p.url());
 // cobertura em todas as páginas (nada por cima de botão visível)
 await p.waitForLoadState("networkidle"); await p.waitForTimeout(800);
@@ -51,6 +64,7 @@ for (const rota of ["/", "/resumo", "/dre", "/campanhas", "/manuais", "/venda-ma
       const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
       if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) continue;
       const top = document.elementFromPoint(cx, cy);
+      if (top && top.closest(".barra-inferior")) continue; // barra inferior fixa: a página rola para cima dela
       if (!(top === el || el.contains(top))) out.push(`${(el.textContent || el.getAttribute("aria-label") || "").trim().slice(0, 20)} ← ${top?.tagName}`);
     }
     return { cobertos: out, overflowX: document.documentElement.scrollWidth > innerWidth + 1 };

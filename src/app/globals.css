@@ -109,18 +109,13 @@ a, button, select, input, summary, label { touch-action: manipulation; }
 .btn, .chip, .nav-item, select { min-height: 44px; display: inline-flex; align-items: center; }
 @media (hover: hover) { .btn:hover { background: var(--surface-2); } .btn-primary:hover { background: var(--grad); filter: brightness(1.06); } .nav-item:hover { background: var(--surface-2); } }
 .topo { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--border); } /* sem backdrop-filter: ele viraria o bloco de contenção da gaveta fixa */
-.topo-inner { max-width: 80rem; margin: 0 auto; padding: 8px 12px; display: flex; align-items: center; gap: 10px; }
+.topo-inner { max-width: 72rem; margin: 0 auto; padding: 8px 16px; display: flex; align-items: center; gap: 10px; }
 .marca { font-weight: 800; white-space: nowrap; font-size: 17px; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .nav-desktop { display: none; flex: 1; gap: 2px; overflow-x: auto; }
 @media (min-width: 768px) { .nav-desktop { display: flex; } }
 .nav-item { position: relative; padding: 8px 9px; border-radius: 10px; white-space: nowrap; color: var(--text-2); font-size: 14px; transition: background .15s, color .15s; }
 .nav-item.nav-ativo { background: var(--surface-2); color: var(--text); font-weight: 600; }
 .badge { margin-left: 6px; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--warn); color: #0b1220; font-size: 11px; font-weight: 700; }
-.gaveta { position: fixed; inset: 0; top: 61px; z-index: 40; background: var(--bg); background-image: var(--bg-grad); display: flex; flex-direction: column; overflow-y: auto; }
-.gaveta-lista { display: flex; flex-direction: column; padding: 10px 12px; gap: 6px; }
-.gaveta-lista .nav-item { font-size: 18px; padding: 14px 14px; min-height: 54px; border: 1px solid var(--border); background: var(--surface); border-radius: 14px; }
-.gaveta-lista .nav-item.nav-ativo { background: var(--grad); color: #fff; border-color: transparent; }
-.gaveta-rodape { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-top: 1px solid var(--border); }
 
 /* mini gráfico de barras por hora (CSS puro) */
 .barras-hora { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end; height: 96px; }
@@ -135,3 +130,29 @@ a, button, select, input, summary, label { touch-action: manipulation; }
   table.tab th, table.tab td { padding: 8px 10px; }
   h1 { font-size: 1.15rem; }
 }
+
+/* ---------- barra fixa "Hoje" ---------- */
+.barra-hoje { position: sticky; top: 61px; z-index: 25; background: var(--surface); border-bottom: 1px solid var(--border); }
+.barra-hoje-inner { max-width: 72rem; margin: 0 auto; padding: 6px 16px; display: flex; align-items: center; gap: 18px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.barra-hoje-inner::-webkit-scrollbar { display: none; }
+.bh-rotulo { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+.bh-item { display: flex; flex-direction: column; gap: 0; white-space: nowrap; min-width: max-content; padding: 2px 0; border-radius: 8px; }
+.bh-k { font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
+.bh-v { font-size: 15px; font-weight: 700; }
+.bh-luz { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+@media (hover: hover) { .bh-item:hover .bh-k { color: var(--text-2); } }
+
+/* ---------- menu com grupos (desktop) e barra inferior (celular) ---------- */
+.nav-grupo { position: relative; }
+.nav-pop { position: absolute; top: calc(100% + 6px); left: 0; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--sombra); padding: 6px; display: flex; flex-direction: column; gap: 2px; z-index: 50; }
+.nav-sub { display: block; padding: 8px 10px; border-radius: 8px; font-size: 14px; color: var(--text-2); }
+.nav-sub.nav-ativo { background: var(--surface-2); color: var(--text); font-weight: 600; }
+@media (hover: hover) { .nav-sub:hover { background: var(--surface-2); } }
+.barra-inferior { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border-top: 1px solid var(--border); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
+.bi-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 11px; color: var(--text-3); padding: 4px 0; min-height: 48px; }
+.bi-item.nav-ativo { color: var(--accent); font-weight: 600; }
+.bi-icone { font-size: 20px; line-height: 1; position: relative; }
+.bi-icone .badge { position: absolute; top: -6px; right: -14px; }
+.folha { position: fixed; inset: 0; z-index: 45; background: color-mix(in srgb, var(--bg) 70%, transparent); display: flex; align-items: flex-end; }
+.folha-inner { width: 100%; background: var(--surface); border-radius: 16px 16px 0 0; border-top: 1px solid var(--border); padding: 14px 16px calc(80px + env(safe-area-inset-bottom)); max-height: 80vh; overflow-y: auto; }
+.folha .nav-sub { font-size: 17px; padding: 12px 10px; }
