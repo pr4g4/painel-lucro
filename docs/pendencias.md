@@ -24,7 +24,8 @@ Atualizado em 04/10/2026. Nada aqui bloqueia o que já está pronto; cada item d
 - No Supabase → SQL Editor: `select start_time, status, return_message from cron.job_run_details order by start_time desc limit 10;` Se `status = failed`, cole o `return_message` para mim. Fontes sem chave (Meta/OpenAI/kie) agora mostram "sem chave (tentou HH:MM)" em vez de uma hora antiga.
 
 ## Após o deploy de 05/10 (desempenho e correções)
-- Rodar `drizzle/0002_indices_desempenho.sql` no Supabase e abrir `/api/seed?segredo=…` (cria `pendente_expira_oxxo_h` = 72, `pendente_expira_spei_h` = 24, `pendente_expira_outros_h` = 48 e `openai_precos_json` fica opcional).
+- Índices 0002: feitos em 05/10. Parâmetros novos: criados sozinhos pela coleta de 10 em 10 min (`garantirBasico`), sem abrir `/api/seed`.
+- Aba do navegador em segundo plano: o Chrome pausa animações, temporizadores e parte do JavaScript em abas ocultas; a página pode chegar e só "aparecer"/responder quando a aba volta à frente. Removi a animação de entrada (era o que deixava o conteúdo invisível). Se os botões ainda não responderem em aba oculta, é limitação do navegador: traga a aba para a frente antes de clicar.
 - Produto nas vendas: o CSV de Conciliação da Zenith NÃO traz produto. O webhook preenche se o payload tiver `productName`, `product.name/title`, `checkout.name/title`, `items[0].name`, `metadata.product`/`plan`, `infoproduct`, `description`. Se /produtos continuar vazio, abra uma linha de `zenith_eventos` e me diga quais campos o `data` tem.
 - Conta Meta 01 (act_210256430938513): a tela Campanhas agora mostra, por conta, quantas linhas a última coleta trouxe. "0 linhas" sem erro = a Meta não devolveu gasto (campanhas pausadas/sem veiculação); com erro = problema de acesso.
 

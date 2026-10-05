@@ -101,7 +101,6 @@ table.tab tr:last-child td { border-bottom: none; }
 .skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 60%, transparent), transparent); animation: brilho 1.2s infinite; }
 @keyframes brilho { to { transform: translateX(100%); } }
 @keyframes aparecer { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-main > * { animation: aparecer .25s ease both; }
 @media (prefers-reduced-motion: reduce) { *, *::after { animation: none !important; transition: none !important; } }
 
 /* ---------- toque e navegação (celular primeiro) ---------- */
@@ -117,7 +116,7 @@ a, button, select, input, summary, label { touch-action: manipulation; }
 .nav-item { position: relative; padding: 8px 9px; border-radius: 10px; white-space: nowrap; color: var(--text-2); font-size: 14px; transition: background .15s, color .15s; }
 .nav-item.nav-ativo { background: var(--surface-2); color: var(--text); font-weight: 600; }
 .badge { margin-left: 6px; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--warn); color: #0b1220; font-size: 11px; font-weight: 700; }
-.gaveta { position: fixed; inset: 0; top: 61px; z-index: 40; background: var(--bg); background-image: var(--bg-grad); display: flex; flex-direction: column; overflow-y: auto; animation: aparecer .15s ease; }
+.gaveta { position: fixed; inset: 0; top: 61px; z-index: 40; background: var(--bg); background-image: var(--bg-grad); display: flex; flex-direction: column; overflow-y: auto; }
 .gaveta-lista { display: flex; flex-direction: column; padding: 10px 12px; gap: 6px; }
 .gaveta-lista .nav-item { font-size: 18px; padding: 14px 14px; min-height: 54px; border: 1px solid var(--border); background: var(--surface); border-radius: 14px; }
 .gaveta-lista .nav-item.nav-ativo { background: var(--grad); color: #fff; border-color: transparent; }

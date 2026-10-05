@@ -47,6 +47,8 @@ async function naoConfigurada(fonte: string, vars: string): Promise<ResultadoCol
 /** Ordem importa: câmbio antes das fontes em USD. */
 export async function coletarTudo(): Promise<ResultadoColeta[]> {
   const out: ResultadoColeta[] = [];
+  try { const { garantirBasico } = await import("./basico"); const feito = await garantirBasico(); if (feito.length) out.push({ fonte: "basico", ok: true, registros: feito.length, detalhe: { feito } }); }
+  catch (e) { out.push({ fonte: "basico", ok: false, registros: 0, erro: e instanceof Error ? e.message : String(e) }); }
   for (const f of FONTES) out.push(await coletar(f));
   try { const { verificarSaldos } = await import("./creditos"); await verificarSaldos(); } catch { /* alerta de saldo não derruba a coleta */ }
   return out;
