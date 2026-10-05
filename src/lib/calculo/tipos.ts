@@ -3,6 +3,7 @@
 export type Periodo = { inicio: Date; fim: Date }; // intervalo semiaberto [inicio, fim)
 
 export type Parametro = {
+  id?: number; // só para apagar marcações informativas; o motor não usa
   chave: string;
   valor: string;
   vigenciaInicio: Date;

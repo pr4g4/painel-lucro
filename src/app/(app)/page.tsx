@@ -13,7 +13,13 @@ import { FaltaEmpatar, Projecao, GastoPorHora, TabelaNumeros } from "@/component
 import { CartoesCreditos } from "@/components/creditos";
 import { carregarCreditos } from "@/coletores/creditos";
 import { semaforoSaldo, coletaFalhando } from "@/lib/hoje";
-import { faltaParaEmpatar, gastoPorNumero } from "@/lib/calculo";
+import { faltaParaEmpatar, gastoPorNumero, iaPorVenda, iaPorHora, compararAntesDepois, lucroPorHora } from "@/lib/calculo";
+import { montarEntradaAmpla } from "@/lib/dados";
+import { GraficoLucroHora } from "@/components/grafico-lucro-hora";
+import { GraficoIAHora } from "@/components/grafico-ia-hora";
+import { MarcacaoForm } from "@/components/marcacao-form";
+import { formatInTimeZone } from "date-fns-tz";
+import { paraInputLocal } from "@/lib/periodo-url";
 import { fmtHora, fmtMoeda, fmtMXN, fmtHorasRestantes, fmtNum, fmtPctSimples, fmtRazao } from "@/lib/formato";
 import { ROTULO_FONTE } from "@/coletores";
 import { ultimaTaxaMxnInfo, ROTULO_FONTE_CAMBIO } from "@/coletores/cambio";
@@ -28,7 +34,11 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   const hojeP = resolverAtalho("hoje", estado.agora, estado.marcoZero, estado.tz).periodo;
   const hoje = ctx.calc(hojeP);
   const fatias = dreFatiada(ctx.entrada, estado.periodo, estado.gran, estado.tz);
-  const [taxaMxnInfo, creditos] = await Promise.all([ultimaTaxaMxnInfo().catch(() => null), carregarCreditos(estado.agora, estado.tz).catch(() => null)]);
+  const janela48 = { inicio: new Date(estado.agora.getTime() - 48 * 3_600_000), fim: estado.agora };
+  const [taxaMxnInfo, creditos, entrada48] = await Promise.all([
+    ultimaTaxaMxnInfo().catch(() => null), carregarCreditos(estado.agora, estado.tz).catch(() => null),
+    montarEntradaAmpla(janela48, { tz: estado.tz, incluirHistorico: true, incluirManuais: false }, []).catch(() => null),
+  ]);
   const mesBruto = resolverAtalho("mes_atual", estado.agora, estado.marcoZero, estado.tz).periodo;
   const mesP = { inicio: new Date(Math.max(mesBruto.inicio.getTime(), estado.marcoZero.getTime())), fim: mesBruto.fim }; // mesma base do "desde o marco zero"
   const mes = ctx.calc(mesP);
@@ -55,6 +65,17 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
     const sem = semaforoSaldo(s, coletaFalhando(coletas.get(fonte), estado.agora));
     return <span className={COR_SEM[sem]}>{nome} acaba em {fmtHorasRestantes(s.horasRestantes)}</span>;
   })();
+  // C) IA por venda (exibição) e IA por hora nas últimas 48 h, com marcações
+  const iaV = iaPorVenda(atual), iaVAnt = iaPorVenda(anterior);
+  const COR_IA = { verde: "pos", amarelo: "text-warn", vermelho: "neg" } as const;
+  const horaRotulo = (d: Date) => formatInTimeZone(d, estado.tz, "dd/MM HH'h'");
+  const pontosIA = iaPorHora(entrada48?.lancamentos ?? [], estado.agora, estado.tz, 48);
+  const marcacoes = ctx.params.filter((p) => p.chave === "marcacao_robo").map((p) => ({ id: p.id ?? 0, quando: p.vigenciaInicio, texto: p.valor })).sort((a, b) => a.quando.getTime() - b.quando.getTime());
+  const ultimaMarc = marcacoes.filter((m) => m.quando >= janela48.inicio).at(-1) ?? null;
+  const cmp = ultimaMarc ? compararAntesDepois(pontosIA, ultimaMarc.quando) : null;
+  // D) lucro por hora com vendas marcadas
+  const lph = lucroPorHora(ctx.entrada, estado.periodo, estado.tz);
+  const graficosAbertos = estado.atalho === "hoje" || estado.atalho === "ultimas_24h";
   const cCambio = coletas.get("cambio"); const agendadorHa = cCambio ? Math.round((estado.agora.getTime() - cCambio.ultima.getTime()) / 60_000) : null;
 
   return (
@@ -87,7 +108,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
         <Metrica rotulo="Nº de vendas" valor={t.numVendas} anterior={a.numVendas} formato="int" temBase={temBaseAnterior} />
       </section>
 
-      <Secao id="indicadores" titulo="Indicadores" resumo={`margem ${fmtPctSimples(i.margemLiquida)} · ROAS ${fmtRazao(i.roas)}`}>
+      <Secao id="indicadores" titulo="Indicadores" resumo={`margem ${fmtPctSimples(i.margemLiquida)} · ROAS ${fmtRazao(i.roas)} · IA/venda ${money(iaV.porVenda)}`}>
         <div className="grade-metricas">
           {Math.abs(t.lucroBruto - t.lucroLiquido) >= 0.005 && <Metrica rotulo="Lucro bruto" valor={t.lucroBruto} anterior={a.lucroBruto} colorir {...base} />}
           <Metrica rotulo="Margem líquida" valor={i.margemLiquida} anterior={ia.margemLiquida} formato="pct" temBase={temBaseAnterior} />
@@ -96,7 +117,16 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
           <Metrica rotulo="ROAS" valor={i.roas} anterior={ia.roas} formato="razao" temBase={temBaseAnterior} nota={i.roas == null ? "sem receita no período" : undefined} />
           <Metrica rotulo="POAS" valor={i.poas} anterior={ia.poas} formato="razao" temBase={temBaseAnterior} nota={i.poas == null ? "sem receita no período" : undefined} />
           <Metrica rotulo="Imposto sobre lucro" valor={t.impostoLucro} anterior={a.impostoLucro} inverterSinal {...base} />
+          <div className="metrica" title="IA do período ÷ nº de vendas aprovadas">
+            <div className="metrica-k">IA por venda {iaV.semaforo && <i className="bh-luz" style={{ background: iaV.semaforo === "verde" ? "var(--pos)" : iaV.semaforo === "amarelo" ? "var(--warn)" : "var(--neg)" }} />}</div>
+            <div className={`metrica-v num ${iaV.semaforo ? COR_IA[iaV.semaforo] : ""}`}>{money(iaV.porVenda)}</div>
+            <div className="metrica-s num">{iaV.motivo ? iaV.motivo : <>{iaV.pctTicket != null && `${fmtPctSimples(iaV.pctTicket)} do ticket médio`}{(() => { const v = textoVariacao(iaV.porVenda, iaVAnt.porVenda, temBaseAnterior && iaVAnt.porVenda != null, "moeda", estado.moeda, taxaMxn); return v.texto ? <span className={v.bom == null ? "" : v.bom ? " neg" : " pos"}> · {v.texto}</span> : null; })()}</>}</div>
+          </div>
+          <Metrica rotulo="IA % da receita líquida" valor={iaV.pctReceita} anterior={iaVAnt.pctReceita} formato="pct" temBase={temBaseAnterior && iaVAnt.pctReceita != null} inverterSinal nota={iaV.pctReceita == null ? "sem receita no período" : undefined} />
+          <Metrica rotulo="OpenAI por venda" valor={iaV.openaiPorVenda} anterior={iaVAnt.openaiPorVenda} temBase={temBaseAnterior && iaVAnt.openaiPorVenda != null} inverterSinal {...d} />
+          <Metrica rotulo="kie.ai por venda" valor={iaV.kiePorVenda} anterior={iaVAnt.kiePorVenda} temBase={temBaseAnterior && iaVAnt.kiePorVenda != null} inverterSinal {...d} />
         </div>
+        <p className="text-xs text-ink-3">Semáforo da IA por venda: verde abaixo de 25 % do ticket médio líquido, amarelo de 25 a 40 %, vermelho acima de 40 %.</p>
       </Secao>
 
       <Secao id="custos" titulo="Custos detalhados" resumo={`total ${money(t.metaComImposto + t.zapdata + t.ia + t.operacao)}`}>
@@ -126,7 +156,16 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
         <TabelaNumeros lancamentos={ctx.entrada.lancamentos} periodo={estado.periodo} params={ctx.params} incluirHistorico={estado.incluirHistorico} {...d} />
       </Secao>
 
-      <Secao id="graficos" titulo="Gráficos" resumo={`lucro por ${estado.gran} · ${fatias.length} pontos`}>
+      <Secao id="graficos" titulo="Gráficos" resumo={`lucro por ${estado.gran} · ${fatias.length} pontos`} abertaPadrao={graficosAbertos}>
+        {"indisponivel" in lph ? <p className="text-xs text-warn">Lucro por hora: {lph.indisponivel}.</p> : (
+          <GraficoLucroHora fuso={estado.tz === "America/Mexico_City" ? "México" : "Brasília"}
+            pontos={lph.pontos.map((p) => ({ rotulo: p.rotulo, lucro: p.lucro, acumulado: p.acumulado, meta: p.meta, ia: p.ia, receita: p.receita, vendas: p.vendas }))}
+            vendas={lph.vendas.map((v) => ({ rotulo: v.rotulo, horaRotulo: formatInTimeZone(v.instante, estado.tz, (estado.periodo.fim.getTime() - estado.periodo.inicio.getTime()) / 3_600_000 > 24 ? "dd/MM HH'h'" : "HH'h'"), brutoOriginal: v.brutoOriginal, moeda: v.moeda, liquidoBrl: v.liquidoBrl, metodo: v.metodo, produto: v.produto }))} />
+        )}
+        <GraficoIAHora pontos={pontosIA.map((p) => ({ rotulo: p.rotulo, openai: p.openai, kie: p.kie }))}
+          marcacoes={marcacoes.filter((m) => m.quando >= janela48.inicio).map((m) => ({ rotulo: formatInTimeZone(m.quando, estado.tz, "dd/MM HH:mm"), horaRotulo: horaRotulo(m.quando), texto: `${m.texto} ${formatInTimeZone(m.quando, estado.tz, "HH:mm")}` }))}
+          comparacao={cmp && ultimaMarc ? { ...cmp, texto: `${ultimaMarc.texto} ${formatInTimeZone(ultimaMarc.quando, estado.tz, "dd/MM HH:mm")}` } : null} />
+        {ctx.sessao.papel === "edita" && <MarcacaoForm tz={estado.tz} agoraLocal={paraInputLocal(estado.agora, estado.tz)} marcacoes={marcacoes.map((m) => ({ id: m.id, rotulo: formatInTimeZone(m.quando, estado.tz, "dd/MM HH:mm"), texto: m.texto }))} />}
         <Grafico dados={dadosGrafico} titulo={`Receita líquida × custos empilhados + lucro líquido (por ${estado.gran})`} />
         <GastoPorHora lancamentos={ctx.entrada.lancamentos} periodo={estado.periodo} tz={estado.tz} params={ctx.params} incluirHistorico={estado.incluirHistorico} rotuloPeriodo={ctx.propsSeletor.rotuloPeriodo} {...d} />
         {estado.moeda === "MXN" && <p className="text-xs text-ink-3">Valores em MX$ convertidos de BRL pela última taxa MXN→BRL conhecida ({fmtNum(taxaMxn, 4)}). Gráficos permanecem em R$.</p>}

@@ -78,6 +78,9 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
 - **Barra "Hoje"** fixa no topo de todas as telas: lucro, receita, Meta, IA e saldos das IAs de hoje. Cada item leva para a tela certa.
 - **Painel**: o número grande é o lucro líquido do período escolhido; abaixo, 4 números-chave; depois, seções que abrem com um toque (ficam fechadas até você abrir; o navegador lembra).
 - **Opções ▾** (ao lado da linha do período): fuso, moeda, gráfico por hora/dia, incluir histórico/manuais, copiar link e salvar visão.
+- **Indicadores → IA por venda**: IA do período ÷ vendas aprovadas, com a divisão OpenAI/kie.ai e um semáforo contra o ticket médio (verde < 25 %, amarelo 25–40 %, vermelho > 40 %).
+- **Gráficos → Lucro líquido por hora**: barras verde/vermelho por hora, linha do acumulado e um ponto por venda (toque para ver MX$ bruto, R$ líquido e método). Botão para ver Meta e IA por hora. Abre sozinho em "Hoje" e "Últimas 24 h".
+- **Gráficos → IA por hora (48 h)**: OpenAI e kie.ai separadas. O botão "Marcar no gráfico" grava "mudei o robô às HH:MM" como linha vertical e mostra o gasto por hora antes e depois.
 - Prints de como deve ficar: pasta `docs/prints/`.
 
 ## Se algo der errado

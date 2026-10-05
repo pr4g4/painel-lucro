@@ -16,7 +16,7 @@ const n = (x: string | number | null | undefined) => (x == null ? 0 : Number(x))
 
 export async function carregarParametros(): Promise<Parametro[]> {
   const rows = await executar((d) => d.select().from(schema.parametros).orderBy(asc(schema.parametros.vigenciaInicio)), 15000, "parâmetros");
-  return rows.map((r) => ({ chave: r.chave, valor: r.valor, vigenciaInicio: r.vigenciaInicio, vigenciaFim: r.vigenciaFim }));
+  return rows.map((r) => ({ id: r.id, chave: r.chave, valor: r.valor, vigenciaInicio: r.vigenciaInicio, vigenciaFim: r.vigenciaFim }));
 }
 
 export async function marcoZero(params?: Parametro[]): Promise<Date> {
