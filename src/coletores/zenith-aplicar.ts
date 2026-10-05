@@ -5,7 +5,7 @@
 import { and, eq, like, sql } from "drizzle-orm";
 import { db, schema, executar } from "@/db";
 import { interpretarEvento, type EventoZenith } from "./zenith-webhook";
-import { normalizarVenda, acharVendaZenith } from "./zenith";
+import { normalizarVenda, acharVendaZenith, acharVendaPorHeuristica, mesclarIds } from "./zenith";
 import { abrirAviso, resolverAvisos } from "./base";
 
 export async function aplicarEvento(ev: EventoZenith, tipoHeader: string | null, timestampHeader: string | null, eventoId: string): Promise<{ resultado: string; vendaIdOrigem: string | null; ok: boolean }> {
@@ -15,7 +15,14 @@ export async function aplicarEvento(ev: EventoZenith, tipoHeader: string | null,
     return { resultado: `ignorado: ${r.motivo}`, vendaIdOrigem: null, ok: true };
   }
   const nova = await normalizarVenda(r.venda, "zenith");
-  const existente = await acharVendaZenith([r.identidade, ...(r.venda.ids ?? [])]);
+  let existente = await acharVendaZenith([r.identidade, ...(r.venda.ids ?? [])]);
+  let viaHeuristica = false;
+  if (!existente && nova.status === "aprovada") {
+    const familia = (r.venda.payload as { familia?: string })?.familia ?? null;
+    existente = await acharVendaPorHeuristica({ id: r.identidade, bruto: r.venda.bruto, moeda: r.venda.moeda, aprovadaEm: nova.aprovadaEm, familia, ids: r.venda.ids });
+    viaHeuristica = !!existente;
+  }
+  if (existente) await mesclarIds(existente.id, [r.identidade, ...(r.venda.ids ?? [])]);
   let resultado: string;
   if (!existente) {
     if (nova.status === "reembolsada" || nova.status === "chargeback") {
@@ -28,7 +35,7 @@ export async function aplicarEvento(ev: EventoZenith, tipoHeader: string | null,
     if (existente.status === "pendente") {
       await executar((d) => d.update(schema.vendas).set({ status: "aprovada", aprovadaEm: nova.aprovadaEm, brutoOriginal: nova.brutoOriginal, taxaCambio: nova.taxaCambio, brutoBrl: nova.brutoBrl, taxaPctBrl: nova.taxaPctBrl, taxaFixaBrl: nova.taxaFixaBrl, cambioPctBrl: nova.cambioPctBrl, liquidoBrl: nova.liquidoBrl, reservaBrl: nova.reservaBrl, historico: nova.historico, payload: nova.payload, coletadoEm: new Date() }).where(eq(schema.vendas.id, existente.id)));
       resultado = `venda ${r.identidade} aprovada (era pendente) via ${r.descricao}`;
-    } else resultado = `venda ${r.identidade} já registrada (${existente.status}); ${r.descricao} não somou de novo`;
+    } else resultado = `venda ${r.identidade} já registrada como ${existente.idOrigem} (${existente.status})${viaHeuristica ? " [mesmo valor/moeda em até 10 min, família diferente]" : ""}; ${r.descricao} não somou de novo`;
   } else if (nova.status === "pendente") {
     resultado = `venda ${r.identidade} já ${existente.status}; pending ignorado`;
   } else {

@@ -5,7 +5,7 @@
  */
 import { executarColeta, upsertVendas, marcoZeroAtual, taxaDoDia, diaBrasilia, type NovaVenda } from "./base";
 import { db, schema } from "@/db";
-import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import { numeroVigente } from "@/lib/calculo";
 
 export type VendaZenithBruta = {
@@ -74,6 +74,75 @@ export async function acharVendaZenith(candidatos: string[]) {
     .where(and(eq(schema.vendas.fonte, "zenith"), or(inArray(schema.vendas.idOrigem, ids), sql`(${schema.vendas.payload} -> 'ids') ?| array[${sql.join(ids.map((i) => sql`${i}`), sql`, `)}]::text[]`)))
     .limit(1);
   return v;
+}
+
+export const JANELA_DEDUP_MIN = 10;
+
+/**
+ * Mesmo pagamento chegando por famílias diferentes (deposit.credited ↔ payment.captured/checkout.succeeded) sem id em comum:
+ * mesmo valor bruto e moeda, aprovação com até 10 min de diferença e família diferente. Só vale entre aprovadas/pendentes.
+ */
+export async function acharVendaPorHeuristica(v: { bruto: number; moeda: string; aprovadaEm?: Date | string | null; familia?: string | null; ids?: string[]; id: string }) {
+  const quando = v.aprovadaEm ? new Date(v.aprovadaEm) : null;
+  if (!quando || !v.bruto) return undefined;
+  const ini = new Date(quando.getTime() - JANELA_DEDUP_MIN * 60_000), fim = new Date(quando.getTime() + JANELA_DEDUP_MIN * 60_000);
+  const rows = await db.select().from(schema.vendas).where(and(
+    eq(schema.vendas.fonte, "zenith"), eq(schema.vendas.moeda, v.moeda), eq(schema.vendas.brutoOriginal, String(v.bruto)),
+    inArray(schema.vendas.status, ["aprovada", "pendente"]), gte(schema.vendas.aprovadaEm, ini), lte(schema.vendas.aprovadaEm, fim),
+  ));
+  const minhaFamilia = v.familia ?? "desconhecida";
+  return rows.find((r) => {
+    const pl = r.payload as { familia?: string; origem?: string } | null;
+    const familiaDele = pl?.familia ?? (pl?.origem === "csv_conciliacao" ? "csv" : "desconhecida");
+    return familiaDele !== minhaFamilia && r.idOrigem !== v.id;
+  });
+}
+
+/** Acrescenta ids alternativos à venda mantida, para que os próximos eventos liguem direto. */
+export async function mesclarIds(vendaId: number, ids: string[]) {
+  const [r] = await db.select().from(schema.vendas).where(eq(schema.vendas.id, vendaId)).limit(1);
+  if (!r) return;
+  const pl = (r.payload as Record<string, unknown>) ?? {};
+  const atuais = Array.isArray(pl.ids) ? (pl.ids as string[]) : [];
+  const novos = [...new Set([...atuais, ...ids.filter(Boolean)])];
+  if (novos.length !== atuais.length) await db.update(schema.vendas).set({ payload: { ...pl, ids: novos } }).where(eq(schema.vendas.id, vendaId));
+}
+
+/**
+ * Varredura de duplicadas já gravadas (mesmo valor, moeda e família diferente dentro de 10 min). Mantém a venda com id da Zenith
+ * (a que veio no CSV / tem origem csv_conciliacao, senão a mais antiga) e marca a outra como `cancelada` com observação.
+ * Nunca apaga; o evento bruto fica em zenith_eventos. Com `aplicar = false` só lista.
+ */
+export async function varrerDuplicadas(desde: Date, aplicar: boolean): Promise<{ pares: { mantida: string; anulada: string; bruto: string; aprovadaEm: string | null }[] }> {
+  const rows = await db.select().from(schema.vendas).where(and(eq(schema.vendas.fonte, "zenith"), inArray(schema.vendas.status, ["aprovada", "pendente"]), gte(schema.vendas.aprovadaEm, desde))).orderBy(schema.vendas.aprovadaEm);
+  const pares: { mantida: string; anulada: string; bruto: string; aprovadaEm: string | null }[] = [];
+  const anuladas = new Set<number>();
+  for (let i = 0; i < rows.length; i++) {
+    const a = rows[i]; if (anuladas.has(a.id) || !a.aprovadaEm) continue;
+    for (let j = i + 1; j < rows.length; j++) {
+      const b = rows[j]; if (anuladas.has(b.id) || !b.aprovadaEm) continue;
+      if (b.aprovadaEm.getTime() - a.aprovadaEm.getTime() > JANELA_DEDUP_MIN * 60_000) break;
+      if (b.brutoOriginal !== a.brutoOriginal || b.moeda !== a.moeda) continue;
+      const fa = familiaDe(a.payload), fb = familiaDe(b.payload);
+      if (fa === fb) continue;
+      // mantém a que tem origem no CSV (id confirmado pela Zenith); senão a que não é depósito; senão a mais antiga
+      const manterA = fa === "csv" ? true : fb === "csv" ? false : fa !== "deposito";
+      const mantida = manterA ? a : b, anulada = manterA ? b : a;
+      anuladas.add(anulada.id);
+      pares.push({ mantida: mantida.idOrigem, anulada: anulada.idOrigem, bruto: a.brutoOriginal, aprovadaEm: a.aprovadaEm?.toISOString() ?? null });
+      if (aplicar) {
+        await db.update(schema.vendas).set({ status: "cancelada", observacao: `duplicada de ${mantida.idOrigem} (mesmo pagamento recebido por outro evento); anulada em ${new Date().toISOString()}` }).where(eq(schema.vendas.id, anulada.id));
+        const idsAnulada = ((anulada.payload as { ids?: string[] })?.ids) ?? [anulada.idOrigem];
+        await mesclarIds(mantida.id, [anulada.idOrigem, ...idsAnulada]);
+      }
+    }
+  }
+  return { pares };
+}
+
+function familiaDe(payload: unknown): string {
+  const pl = payload as { familia?: string; origem?: string } | null;
+  return pl?.familia ?? (pl?.origem === "csv_conciliacao" ? "csv" : "desconhecida");
 }
 
 /** Importa um lote (CSV ou lista). Tudo-ou-nada: valida todas as linhas antes; idempotente por (fonte, idOrigem) e pelos ids alternativos. */

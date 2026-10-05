@@ -102,8 +102,11 @@ export function interpretarEvento(ev: EventoZenith, tipoHeader: string | null, t
   const tipo = String(ev.type ?? tipoHeader ?? "");
   if (!(TIPOS_TRATADOS as readonly string[]).includes(tipo)) return { ok: false, motivo: `tipo não tratado: ${tipo || "(vazio)"}`, desconhecido: !tipo };
   const d = (ev.data ?? {}) as Record<string, unknown>;
-  // identidade = id da venda na Zenith (= id_venda do CSV) > referenceId > id do evento; os outros ficam como ids alternativos
-  const candidatos = [g(d, "id", "paymentId", "checkoutId", "depositId"), g(d, "referenceId", "reference_id", "reference"), g(d, "saleId", "orderId")].filter(Boolean).map(String);
+  // identidade = id da venda na Zenith (= id_venda do CSV) > referenceId > id do evento.
+  // Todos os outros ids do payload (paymentId, checkoutId, depositId, payment.id, checkout.id, reference…) viram ids alternativos:
+  // é o que liga deposit.credited ↔ payment.captured/checkout.succeeded do mesmo pagamento.
+  const principais = [g(d, "id", "paymentId", "checkoutId", "depositId"), g(d, "referenceId", "reference_id", "reference"), g(d, "saleId", "orderId")].filter(Boolean).map(String);
+  const candidatos = [...new Set([...principais, ...coletarIds(d)])];
   const identidade = candidatos[0] ?? eventId;
   const amountRaw = g(d, "amount", "amountCents", "value");
   const amount = typeof amountRaw === "number" ? amountRaw : typeof amountRaw === "string" ? Number(amountRaw) : NaN;
@@ -115,13 +118,26 @@ export function interpretarEvento(ev: EventoZenith, tipoHeader: string | null, t
   const bruto = Number.isFinite(amount) ? amount / 100 : 0; // centavos → unidades
   const produto = (g(d, "productName", "product", "description", "concept") as string | undefined) ?? null;
   const metodo = String(g(d, "paymentMethod", "method") ?? (tipo === "deposit.credited" ? "spei" : ""));
-  const base = { id: identidade, moeda: moeda as "MXN" | "BRL", bruto, produto, ids: candidatos, payload: { eventoId: eventId, tipo, metodo, data: d } };
+  const familia = tipo === "deposit.credited" ? "deposito" : "pagamento";
+  const base = { id: identidade, moeda: moeda as "MXN" | "BRL", bruto, produto, ids: candidatos, payload: { eventoId: eventId, tipo, familia, metodo, data: d } };
   if ((TIPOS_APROVACAO as readonly string[]).includes(tipo)) {
     return { ok: true, identidade, descricao: `${tipo}${metodo ? ` (${metodo})` : ""}`, venda: { ...base, status: "aprovada", criadaEm: quando, aprovadaEm: quando } };
   }
   if (tipo === "payment.pending") return { ok: true, identidade, descricao: tipo, venda: { ...base, status: "pendente", criadaEm: quando, aprovadaEm: null } };
   const quandoReembolso = tsParaDate(g(d, "refundedAt", "refunded_at", "chargebackAt", "occurredAt") as string | number | undefined) ?? quando;
   return { ok: true, identidade, descricao: tipo, venda: { ...base, status: tipo === "payment.chargeback" ? "chargeback" : "reembolsada", criadaEm: null, aprovadaEm: null, reembolsadaEm: quandoReembolso } };
+}
+
+/** Varre o payload (até 3 níveis) e devolve todo valor de campo cujo nome termina em "id"/"Id"/"reference" (sem o id do cliente/CLABE). */
+export function coletarIds(obj: unknown, nivel = 0): string[] {
+  if (!obj || typeof obj !== "object" || nivel > 3) return [];
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    if (/customer|client|clabe|account|bank|card/i.test(k)) continue;
+    if ((typeof v === "string" || typeof v === "number") && /(^id$|id$|_id$|reference$|referencia$)/i.test(k) && String(v).length >= 4) out.push(String(v));
+    else if (v && typeof v === "object") out.push(...coletarIds(v, nivel + 1));
+  }
+  return out;
 }
 
 function tsParaDate(x: string | number | undefined): Date | null {
