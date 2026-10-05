@@ -41,3 +41,13 @@ export function coletaFalhando(c: EstadoColeta | undefined, agora: Date): boolea
   if (c.naoConfigurada) return false;
   return c.falhasSeguidas >= 3 || !c.ultimaOk || agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000;
 }
+
+let ultimaAvaliacaoAgendador = 0;
+/** Se o agendador estiver parado, só uma página aberta pode perceber: avalia (e alerta) no máximo a cada 10 min por instância. */
+export async function avaliarAgendadorSeParado(d: DadosHoje) {
+  const c = d.coletas.get("cambio");
+  const parado = !c || d.agora.getTime() - c.ultima.getTime() > 30 * 60_000;
+  if (!parado || Date.now() - ultimaAvaliacaoAgendador < 10 * 60_000) return;
+  ultimaAvaliacaoAgendador = Date.now();
+  try { const { processarAlertas } = await import("@/alertas/motor"); await processarAlertas(d.agora); } catch { /* silencioso */ }
+}

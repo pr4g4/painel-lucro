@@ -54,5 +54,6 @@ export const PARAMETROS_PADRAO: Record<string, { valor: string; observacao: stri
   pendente_expira_oxxo_h: { valor: "72", observacao: "Checkout OXXO pendente some da lista após N horas sem pagamento." },
   pendente_expira_spei_h: { valor: "24", observacao: "Checkout SPEI pendente some da lista após N horas sem pagamento." },
   pendente_expira_outros_h: { valor: "48", observacao: "Outros métodos: pendente some após N horas." },
+  alerta_repeticao_h: { valor: "3", observacao: "Um mesmo alerta no WhatsApp só se repete depois de N horas enquanto o problema continuar." },
   kie_pacote_creditos: { valor: "1000", observacao: "Tamanho do pacote de recarga do kie.ai (1.000 créditos = US$ 5). Usado para inferir uso quando há recarga entre duas leituras." },
 };

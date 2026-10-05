@@ -5,6 +5,8 @@ import { ultimasColetas } from "@/lib/dados";
 import { fmtDataHora } from "@/lib/formato";
 import { ROTULO_FONTE } from "@/coletores";
 import { resolverAviso } from "./acoes";
+import { listarAlertas } from "@/alertas/motor";
+import { provedorAtual } from "@/alertas/provedores";
 
 export const dynamic = "force-dynamic";
 const TZ = process.env.APP_TZ ?? "America/Sao_Paulo";
@@ -14,6 +16,8 @@ export default async function Avisos() {
   const [avisos, coletas] = await Promise.all([executar((d) => d.select().from(schema.avisos).orderBy(desc(schema.avisos.criadoEm)).limit(200), 15000, "avisos"), ultimasColetas()]);
   const abertos = avisos.filter((a) => !a.resolvidoEm);
   const agora = Date.now();
+  const prov = provedorAtual();
+  const alertas = await listarAlertas();
   return (
     <>
       <h1 className="font-semibold">Avisos <span className="text-xs text-ink-3 font-normal">{abertos.length} aberto(s)</span></h1>
@@ -26,6 +30,16 @@ export default async function Avisos() {
             return <div key={f} className={`card p-2 ${atras && f !== "zenith" ? "border-warn" : ""}`}><b>{ROTULO_FONTE[f]}</b><div className="text-xs text-ink-2">última coleta ok: {c?.ultimaOk ? fmtDataHora(c.ultimaOk, TZ, "dd/MM HH:mm") : "nunca"}{c?.erro && <div className="text-neg">erro: {c.erro}</div>}{c?.falhasSeguidas ? <div className="text-warn">{c.falhasSeguidas} falha(s) seguida(s)</div> : null}</div></div>;
           })}
         </div>
+      </div>
+      <div className="card p-3 text-sm">
+        <h2 className="font-semibold mb-1">Alertas no WhatsApp</h2>
+        {prov.configurado() ? <p className="text-ink-2">Provedor: {prov.nome} · configurado. <a className="underline" href="/api/alertas/teste" target="_blank" rel="noreferrer">Enviar mensagem de teste</a>.</p>
+          : <p className="text-warn">alerta WhatsApp não configurado: falta {prov.faltando().join(", ")} na Vercel (passo a passo em docs/pendencias.md).</p>}
+        {alertas === null ? <p className="text-warn text-xs mt-1">Tabela de alertas ausente: rode drizzle/0003_alertas.sql no Supabase.</p> : alertas.length > 0 && (
+          <ul className="mt-2 text-xs flex flex-col gap-1">
+            {alertas.map((a) => <li key={a.id}><span className={a.estado === "aberto" ? "neg" : "pos"}>{a.estado}</span> · {a.chave} · {a.mensagem} · envios {a.envios}{a.ultimoEnvioEm ? ` (último ${fmtDataHora(a.ultimoEnvioEm, TZ, "dd/MM HH:mm")})` : ""}{a.ultimoErro ? <span className="neg"> · erro: {a.ultimoErro}</span> : null}</li>)}
+          </ul>
+        )}
       </div>
       <div className="md:hidden flex flex-col gap-2">
         {avisos.map((a) => (

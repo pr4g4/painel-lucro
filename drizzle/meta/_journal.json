@@ -22,6 +22,13 @@
       "when": 1791172363761,
       "tag": "0002_indices_desempenho",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791175362704,
+      "tag": "0003_alertas",
+      "breakpoints": true
     }
   ]
 }

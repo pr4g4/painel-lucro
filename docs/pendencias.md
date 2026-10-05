@@ -29,6 +29,20 @@ Atualizado em 04/10/2026. Nada aqui bloqueia o que já está pronto; cada item d
 - Produto nas vendas: o CSV de Conciliação da Zenith NÃO traz produto. O webhook preenche se o payload tiver `productName`, `product.name/title`, `checkout.name/title`, `items[0].name`, `metadata.product`/`plan`, `infoproduct`, `description`. Se /produtos continuar vazio, abra uma linha de `zenith_eventos` e me diga quais campos o `data` tem.
 - Conta Meta 01 (act_210256430938513): a tela Campanhas agora mostra, por conta, quantas linhas a última coleta trouxe. "0 linhas" sem erro = a Meta não devolveu gasto (campanhas pausadas/sem veiculação); com erro = problema de acesso.
 
+## Alertas no WhatsApp — ativação (só o Erick, com o celular na mão)
+O app usa o CallMeBot (grátis, sem conta). Leva 3 minutos:
+1. No celular, **salve o contato** +34 644 71 81 99 (nome: CallMeBot).
+2. Abra o WhatsApp e **mande para esse contato exatamente**: `I allow callmebot to send me messages`
+3. Em até 2 minutos o CallMeBot responde com uma mensagem contendo **"your apikey is 123456"** (um número). Anote esse número.
+4. Na Vercel → projeto `painel-lucro` → Settings → Environment Variables → **Add**:
+   - `WHATSAPP_ALERTA_FONE` = `5547991498006` (seu número com DDI 55 e DDD, só dígitos)
+   - `CALLMEBOT_APIKEY` = o número do passo 3
+   → Save → Deployments → **Redeploy** (último deploy, "Redeploy").
+5. No Supabase → SQL Editor → cole e rode `drizzle/0003_alertas.sql` (raw: https://raw.githubusercontent.com/pr4g4/painel-lucro/main/drizzle/0003_alertas.sql).
+6. Teste: logado no app, abra `https://painel-lucro.vercel.app/api/alertas/teste`. Deve chegar "✅ Painel de Lucro: teste de alerta…" no seu WhatsApp. Se a resposta disser `não configurado`, falta uma variável; se disser erro do CallMeBot, confira a apikey.
+O que dispara (1 mensagem por tipo a cada `alerta_repeticao_h` = 3 h, e um "✅ Resolvido" quando normaliza): saldo kie.ai/OpenAI abaixo de `alerta_saldo_horas` (6 h) ou de `alerta_saldo_usd` (US$ 3); fonte com 3 coletas seguidas falhando (Meta, Zenith, OpenAI, kie, câmbio); webhook da Zenith rejeitado; agendador parado há mais de 30 min (detectado quando alguém abre o app, já que parado ele não roda nada).
+Alternativa pela API do ZapData: `WHATSAPP_PROVEDOR=zapdata`, `ZAPDATA_ALERTA_URL` (endpoint que aceita POST JSON `{ phone, message }`) e, se precisar, `ZAPDATA_ALERTA_TOKEN`. Me passe a URL da doc do ZapData se quiser esse caminho.
+
 ## Decisões a confirmar
 5. **Teste de sanidade do ZapData (R$ 126,68).** Pela fórmula 4 (ciclo dia 2 → dia 1), 12/09–02/10 dá R$ 83,17. O valor 126,68 = 33 dias × R$ 119 ÷ 31, ou seja, uma janela de 33 dias (ex.: 31/08–02/10). Divergência maior que R$ 1,00; implementei a fórmula 4 como escrita. Confirmar qual janela foi usada ou aceitar 83,17 como o número correto para 12/09–02/10.
 6. **Reembolso de venda histórica (anterior ao marco zero).** Hoje fica fora da receita (começamos do zero). Se quiser que apareça como linha negativa mesmo assim, é um ajuste de 1 linha.

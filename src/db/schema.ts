@@ -192,6 +192,20 @@ export const zenithEventos = pgTable("zenith_eventos", {
   payload: jsonb("payload").notNull(), // corpo bruto (JSON) — sem dados de cartão (a Zenith não envia PAN)
 }, (t) => [index("zenith_eventos_recebido").on(t.recebidoEm), index("zenith_eventos_pendentes").on(t.assinaturaOk, t.processado)]);
 
+// ---------- alertas enviados (WhatsApp): estado por chave, para não repetir e para avisar "resolvido" ----------
+export const alertas = pgTable("alertas", {
+  id: serial("id").primaryKey(),
+  chave: text("chave").notNull().unique(), // saldo:kie | coleta:meta | webhook:zenith | agendador
+  tipo: text("tipo").notNull(),
+  estado: text("estado").notNull().default("aberto"), // aberto | resolvido
+  mensagem: text("mensagem").notNull(),
+  abertoEm: timestamp("aberto_em", { withTimezone: true }).notNull().defaultNow(),
+  ultimoEnvioEm: timestamp("ultimo_envio_em", { withTimezone: true }),
+  resolvidoEm: timestamp("resolvido_em", { withTimezone: true }),
+  envios: integer("envios").notNull().default(0),
+  ultimoErro: text("ultimo_erro"),
+});
+
 export const visoesSalvas = pgTable("visoes_salvas", {
   id: serial("id").primaryKey(),
   nome: text("nome").notNull(),

@@ -55,6 +55,7 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
 ## Migrações posteriores (rodar uma vez cada, no SQL Editor do Supabase)
 - `drizzle/0001_zenith_eventos.sql` (tabela de eventos do webhook) — já rodou se o webhook funciona.
 - `drizzle/0002_indices_desempenho.sql` (índices; deixa as páginas rápidas): raw https://raw.githubusercontent.com/pr4g4/painel-lucro/main/drizzle/0002_indices_desempenho.sql → cole → Run.
+- `drizzle/0003_alertas.sql` (estado dos alertas de WhatsApp).
 - Depois de qualquer deploy que crie parâmetros novos, abra `https://SEU-SITE.vercel.app/api/seed?segredo=…` (cria só o que falta).
 
 ## Parte 4 — Ligar cada fonte (quando tiver a chave)

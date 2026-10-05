@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { dadosHoje, semaforoSaldo, coletaFalhando, type Semaforo } from "@/lib/hoje";
+import { dadosHoje, semaforoSaldo, coletaFalhando, avaliarAgendadorSeParado, type Semaforo } from "@/lib/hoje";
 import { fmtBRL } from "@/lib/formato";
 
 const COR: Record<Semaforo, string> = { verde: "var(--pos)", amarelo: "var(--warn)", vermelho: "var(--neg)", cinza: "var(--text-3)" };
@@ -7,6 +7,7 @@ const COR: Record<Semaforo, string> = { verde: "var(--pos)", amarelo: "var(--war
 /** Barra fixa "Hoje" no topo de todas as páginas (desktop e celular). Cada item leva ao detalhe. */
 export async function BarraHoje() {
   const d = await dadosHoje();
+  void avaliarAgendadorSeParado(d);
   const t = d.hoje?.totais;
   const sk = semaforoSaldo(d.kie, coletaFalhando(d.coletas.get("kie"), d.agora));
   const so = semaforoSaldo(d.openai, coletaFalhando(d.coletas.get("openai"), d.agora));
