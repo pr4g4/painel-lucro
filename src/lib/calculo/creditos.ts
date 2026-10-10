@@ -72,8 +72,11 @@ export function saldoOpenAI(l: LancamentoCalc[], agora: Date, inicioHoje: Date):
   const recargasDepois = soma(l.filter((x) => x.fonte === "openai" && x.tipo === "recarga_ia" && x.instante > ref.instante && x.instante <= agora).map((x) => x.valorOriginal));
   const custoDepois = usoEntre(l.filter((x) => x.fonte === "openai" && x.tipo === "uso_ia"), ref.instante, agora);
   const saldo = ref.valorOriginal + recargasDepois - custoDepois;
-  const horas = c.ritmoUsdPorHora > 0 ? Math.max(0, saldo) / c.ritmoUsdPorHora : null;
-  return { ...base, saldoUsd: saldo, lidoEm: ref.instante, horasRestantes: horas, referencia: { valorUsd: ref.valorOriginal, em: ref.instante, recargasDepoisUsd: recargasDepois, custoDepoisUsd: custoDepois } };
+  const referencia = { valorUsd: ref.valorOriginal, em: ref.instante, recargasDepoisUsd: recargasDepois, custoDepoisUsd: custoDepois };
+  // estimativa abaixo de zero = a conta continua funcionando, logo houve recarga não registrada: não mostrar número nem alertar
+  if (saldo < 0) return { ...base, saldoUsd: null, lidoEm: ref.instante, horasRestantes: null, referencia, indisponivel: "conferir saldo (provável recarga não registrada)" };
+  const horas = c.ritmoUsdPorHora > 0 ? saldo / c.ritmoUsdPorHora : null;
+  return { ...base, saldoUsd: saldo, lidoEm: ref.instante, horasRestantes: horas, referencia };
 }
 
 export type LimitesSaldo = { horas: number; usd: number };

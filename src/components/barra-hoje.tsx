@@ -1,12 +1,15 @@
 import Link from "next/link";
-import { dadosHoje, semaforoSaldo, coletaFalhando, avaliarAgendadorSeParado, type Semaforo } from "@/lib/hoje";
+import { dadosHoje, semaforoSaldo, coletaFalhando, avaliarAgendadorSeParado, fontesAtrasadas, type Semaforo } from "@/lib/hoje";
+import { FaixaAtraso } from "@/components/faixa-atraso";
 import { fmtBRL, fmtUSD, fmtHorasRestantes } from "@/lib/formato";
 
 const COR: Record<Semaforo, string> = { verde: "var(--pos)", amarelo: "var(--warn)", vermelho: "var(--neg)", cinza: "var(--text-3)" };
 
 /** Barra fixa "Hoje" no topo de todas as páginas (desktop e celular). Cada item leva ao detalhe. */
-export async function BarraHoje() {
+export async function BarraHoje({ webhookZenithRejeitado = false }: { webhookZenithRejeitado?: boolean } = {}) {
   const d = await dadosHoje();
+  const atrasos = fontesAtrasadas(d.coletas, d.agora, webhookZenithRejeitado);
+  const incompleto = atrasos.some((a) => a.fonte === "meta" || a.fonte === "zenith");
   void avaliarAgendadorSeParado(d);
   const t = d.hoje?.totais;
   const sk = semaforoSaldo(d.kie, coletaFalhando(d.coletas.get("kie"), d.agora));
@@ -18,7 +21,7 @@ export async function BarraHoje() {
       <div className="barra-hoje-inner">
         <span className="bh-rotulo">Hoje</span>
         <Link href="/?p=hoje" prefetch={false} className="bh-item">
-          <span className="bh-k">Lucro líquido</span>
+          <span className="bh-k">Lucro líquido{incompleto && <span className="bh-incompleto">incompleto</span>}</span>
           <span className={`bh-v num ${t ? (t.lucroLiquido >= 0 ? "pos" : "neg") : ""}`}>{t ? fmtBRL(t.lucroLiquido) : "—"}</span>
         </Link>
         <Link href="/dre?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">Receita líq.</span><span className="bh-v num">{t ? fmtBRL(t.receitaLiquida) : "—"}</span></Link>
@@ -33,6 +36,7 @@ export async function BarraHoje() {
           <span className="bh-v num">{d.openai?.saldoUsd != null ? usd(d.openai.saldoUsd) + horas(d.openai.horasRestantes) : "—"}</span>
         </Link>
       </div>
+      <FaixaAtraso atrasos={atrasos} tz={d.tz} compacta />
     </div>
   );
 }

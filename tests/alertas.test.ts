@@ -31,10 +31,22 @@ describe.skipIf(!process.env.DATABASE_URL)("alertas WhatsApp (banco local)", () 
     await processar(new Date(t0.getTime() + 6 * 3_600_000), fake, cond(true)); // reabre
     expect(enviados).toHaveLength(4);
   });
-  it("sem provedor configurado: guarda o estado, não envia, e informa o que falta", async () => {
+  it("sem provedor configurado: guarda o estado, não envia, não conta envio nem repetindo 100 ciclos, e informa o que falta", async () => {
     await db.execute(sql`truncate alertas restart identity`);
-    const r = await processar(t0, naoConfig, [{ chave: "agendador", tipo: "agendador_parado", ativa: true, mensagem: "Agendador parado" }]);
+    const cond = [{ chave: "agendador", tipo: "agendador_parado", ativa: true, mensagem: "Agendador parado" }];
+    const r = await processar(t0, naoConfig, cond);
     expect(r.configurado).toBe(false); expect(r.faltando).toEqual(["CALLMEBOT_APIKEY"]); expect(r.enviados).toHaveLength(0);
-    expect((await db.select().from(schema.alertas)).length).toBe(1);
+    for (let i = 1; i <= 100; i++) await processar(new Date(t0.getTime() + i * 600_000), naoConfig, cond);
+    const [a] = await db.select().from(schema.alertas);
+    expect(a.envios).toBe(0); expect(a.ultimoEnvioEm).toBeNull(); expect(a.estado).toBe("aberto");
+  });
+  it("provedor falhando: tenta no máximo 1 vez a cada 3 h (não martela o CallMeBot) e não conta como envio", async () => {
+    await db.execute(sql`truncate alertas restart identity`);
+    let tentativas = 0;
+    const quebrado: Provedor = { nome: "quebrado", configurado: () => true, faltando: () => [], async enviar() { tentativas++; throw new Error("CallMeBot HTTP 500"); } };
+    const cond = [{ chave: "saldo:openai", tipo: "saldo_baixo", ativa: true, mensagem: "Saldo OpenAI baixo" }];
+    for (let i = 0; i < 30; i++) await processar(new Date(t0.getTime() + i * 600_000), quebrado, cond); // 5 h em ciclos de 10 min
+    expect(tentativas).toBe(2); // t0 e t0+3h
+    const [a] = await db.select().from(schema.alertas); expect(a.envios).toBe(0); expect(a.ultimoErro).toMatch(/500/);
   });
 });

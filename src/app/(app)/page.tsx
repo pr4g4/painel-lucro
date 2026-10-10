@@ -12,7 +12,9 @@ import { VisoesSalvas } from "@/components/visoes";
 import { FaltaEmpatar, Projecao, GastoPorHora, TabelaNumeros } from "@/components/operacao";
 import { CartoesCreditos } from "@/components/creditos";
 import { carregarCreditos } from "@/coletores/creditos";
-import { semaforoSaldo, coletaFalhando } from "@/lib/hoje";
+import { semaforoSaldo, coletaFalhando, fontesAtrasadas } from "@/lib/hoje";
+import { FaixaAtraso } from "@/components/faixa-atraso";
+import { avisosAbertos } from "@/lib/dados";
 import { faltaParaEmpatar, gastoPorNumero, iaPorVenda, iaPorHora, compararAntesDepois, lucroPorHora } from "@/lib/calculo";
 import { montarEntradaAmpla } from "@/lib/dados";
 import { GraficoLucroHora } from "@/components/grafico-lucro-hora";
@@ -35,10 +37,14 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   const hoje = ctx.calc(hojeP);
   const fatias = dreFatiada(ctx.entrada, estado.periodo, estado.gran, estado.tz);
   const janela48 = { inicio: new Date(estado.agora.getTime() - 48 * 3_600_000), fim: estado.agora };
-  const [taxaMxnInfo, creditos, entrada48] = await Promise.all([
+  const [taxaMxnInfo, creditos, entrada48, avisosAb] = await Promise.all([
     ultimaTaxaMxnInfo().catch(() => null), carregarCreditos(estado.agora, estado.tz).catch(() => null),
     montarEntradaAmpla(janela48, { tz: estado.tz, incluirHistorico: true, incluirManuais: false }, []).catch(() => null),
+    avisosAbertos().catch(() => []),
   ]);
+  const atrasos = fontesAtrasadas(coletas, estado.agora, avisosAb.some((a) => a.tipo === "webhook_rejeitado"));
+  const periodoTocaHoje = estado.periodo.fim.getTime() > estado.agora.getTime() - 60 * 60_000;
+  const incompleto = periodoTocaHoje && atrasos.some((a) => a.fonte === "meta" || a.fonte === "zenith");
   const mesBruto = resolverAtalho("mes_atual", estado.agora, estado.marcoZero, estado.tz).periodo;
   const mesP = { inicio: new Date(Math.max(mesBruto.inicio.getTime(), estado.marcoZero.getTime())), fim: mesBruto.fim }; // mesma base do "desde o marco zero"
   const mes = ctx.calc(mesP);
@@ -83,11 +89,12 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
       <Suspense fallback={<div className="h-12 skeleton" />}><SeletorPeriodo {...ctx.propsSeletor} semRotulo /></Suspense>
       <VisoesSalvas />
       {ctx.problemas.length > 0 && <div className="text-xs text-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
+      {periodoTocaHoje && <FaixaAtraso atrasos={atrasos} tz={estado.tz} />}
 
       {/* destaque principal */}
       <section className="hero" aria-label="Lucro líquido do período">
         <div className="min-w-0">
-          <div className="hero-k">Lucro líquido do período <span className="text-ink-3">· {ctx.propsSeletor.rotuloPeriodo}</span></div>
+          <div className="hero-k">Lucro líquido do período <span className="text-ink-3">· {ctx.propsSeletor.rotuloPeriodo}</span>{incompleto && <span className="bh-incompleto" title="uma fonte está sem atualizar; o valor vai mudar quando ela voltar">incompleto</span>}</div>
           <div className={`hero-v num ${t.lucroLiquido < 0 ? "neg" : t.lucroLiquido > 0 ? "pos" : ""}`}>{money(t.lucroLiquido)}</div>
           <div className="hero-sub num">
             {varLucro.texto && <span className={varLucro.bom == null ? "" : varLucro.bom ? "pos" : "neg"}>{varLucro.texto}<span className="text-ink-3"> ({ctx.propsSeletor.rotuloAnterior})</span></span>}

@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen flex flex-col">
       <Menu nome={s.nome ?? ""} papel={s.papel ?? "ve"} avisos={avisos.length} sair={sair} />
-      <BarraHoje />
+      <BarraHoje webhookZenithRejeitado={avisos.some((a) => a.tipo === "webhook_rejeitado")} />
       <main className="max-w-6xl w-full mx-auto px-4 py-4 md:py-6 flex flex-col gap-4 flex-1 pb-24 md:pb-6">{children}</main>
     </div>
   );

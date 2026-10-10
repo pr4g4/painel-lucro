@@ -36,10 +36,11 @@ export interface OpenAICliente {
 }
 
 export function openaiClienteReal(adminKey: string): OpenAICliente {
-  async function get<T>(path: string, params: Record<string, string | string[]>): Promise<T[]> {
+  async function get<T>(path: string, params: Record<string, string | string[]>, maxPaginas = 10): Promise<T[]> {
     const out: T[] = [];
-    let page: string | undefined;
+    let page: string | undefined; let paginas = 0;
     do {
+      if (paginas++ >= maxPaginas) break;
       const u = new URL(`https://api.openai.com/v1/organization/${path}`);
       for (const [k, v] of Object.entries(params)) Array.isArray(v) ? v.forEach((x) => u.searchParams.append(k, x)) : u.searchParams.set(k, v);
       if (page) u.searchParams.set("page", page);
@@ -52,7 +53,8 @@ export function openaiClienteReal(adminKey: string): OpenAICliente {
   }
   return {
     usoPorHora: (d, a, p) => get("usage/completions", { start_time: String(d), end_time: String(a), bucket_width: "1h", group_by: ["model", "project_id"], limit: "168", ...(p ? { project_ids: [p] } : {}) }),
-    custoPorDia: (d, a, p) => get("costs", { start_time: String(d), end_time: String(a), bucket_width: "1d", group_by: ["project_id"], limit: "30", ...(p ? { project_ids: [p] } : {}) }),
+    // costs: no máximo 1 chamada por ciclo (limite de 30 req/min na API); 31 baldes cobrem qualquer janela usada aqui
+    custoPorDia: (d, a, p) => get("costs", { start_time: String(d), end_time: String(a), bucket_width: "1d", group_by: ["project_id"], limit: "31", ...(p ? { project_ids: [p] } : {}) }, 1),
   };
 }
 

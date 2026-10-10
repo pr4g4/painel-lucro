@@ -45,26 +45,34 @@ export async function processarAlertas(agora = new Date(), provedor: Provedor = 
   try { existentes = await executar((d) => d.select().from(schema.alertas)); }
   catch (e) { res.tabelaAusente = true; res.erros.push(`tabela alertas ausente (rode drizzle/0003_alertas.sql): ${e instanceof Error ? e.message.slice(0, 80) : e}`); return res; }
   const porChave = new Map(existentes.map((a) => [a.chave, a]));
-  const enviar = async (chave: string, texto: string, patch: Partial<typeof schema.alertas.$inferInsert>) => {
-    if (!res.configurado) { await db.update(schema.alertas).set(patch).where(eq(schema.alertas.chave, chave)); return; }
-    try { await provedor.enviar(texto); res.enviados.push(texto); await db.update(schema.alertas).set({ ...patch, ultimoEnvioEm: agora, ultimoErro: null }).where(eq(schema.alertas.chave, chave)); }
-    catch (e) { const msg = e instanceof Error ? e.message : String(e); res.erros.push(`${chave}: ${msg}`); await db.update(schema.alertas).set({ ...patch, ultimoErro: msg }).where(eq(schema.alertas.chave, chave)); }
+  /**
+   * Envia e conta. Sem provedor configurado: só atualiza a mensagem (envios e último envio ficam como estão).
+   * Com provedor: `envios` conta só mensagens que saíram; `ultimoEnvioEm` marca a TENTATIVA (sucesso ou erro), para que
+   * mesmo falhando não se tente mais de 1 vez a cada `alerta_repeticao_h` (o CallMeBot bloqueia o número se receber rajadas).
+   */
+  const enviar = async (chave: string, texto: string, envios: number, mensagem?: string) => {
+    const base = mensagem !== undefined ? { mensagem } : {};
+    if (!res.configurado) { if (mensagem !== undefined) await db.update(schema.alertas).set(base).where(eq(schema.alertas.chave, chave)); return; }
+    try { await provedor.enviar(texto); res.enviados.push(texto); await db.update(schema.alertas).set({ ...base, envios: envios + 1, ultimoEnvioEm: agora, ultimoErro: null }).where(eq(schema.alertas.chave, chave)); }
+    catch (e) { const msg = e instanceof Error ? e.message : String(e); res.erros.push(`${chave}: ${msg}`); await db.update(schema.alertas).set({ ...base, ultimoEnvioEm: agora, ultimoErro: msg }).where(eq(schema.alertas.chave, chave)); }
   };
   for (const c of conds) {
     const a = porChave.get(c.chave);
     if (c.ativa) {
       if (!a) {
         await db.insert(schema.alertas).values({ chave: c.chave, tipo: c.tipo, estado: "aberto", mensagem: c.mensagem, abertoEm: agora, envios: 0 }).onConflictDoNothing();
-        await enviar(c.chave, `⚠️ Painel de Lucro\n${c.mensagem}`, { envios: 1, mensagem: c.mensagem });
+        await enviar(c.chave, `⚠️ Painel de Lucro\n${c.mensagem}`, 0, c.mensagem);
       } else if (a.estado === "resolvido") {
         await db.update(schema.alertas).set({ estado: "aberto", abertoEm: agora, resolvidoEm: null, mensagem: c.mensagem }).where(eq(schema.alertas.chave, c.chave));
-        await enviar(c.chave, `⚠️ Painel de Lucro\n${c.mensagem}`, { envios: a.envios + 1 });
+        await enviar(c.chave, `⚠️ Painel de Lucro\n${c.mensagem}`, a.envios); // reabriu = ocorrência nova
       } else if (!a.ultimoEnvioEm || agora.getTime() - a.ultimoEnvioEm.getTime() >= repeticaoMs) {
-        await enviar(c.chave, `⚠️ Painel de Lucro (ainda)\n${c.mensagem}`, { envios: a.envios + 1, mensagem: c.mensagem });
+        await enviar(c.chave, `⚠️ Painel de Lucro (ainda)\n${c.mensagem}`, a.envios, c.mensagem);
+      } else if (a.mensagem !== c.mensagem) {
+        await db.update(schema.alertas).set({ mensagem: c.mensagem }).where(eq(schema.alertas.chave, c.chave));
       }
     } else if (a && a.estado === "aberto") {
       await db.update(schema.alertas).set({ estado: "resolvido", resolvidoEm: agora }).where(eq(schema.alertas.chave, c.chave));
-      await enviar(c.chave, `✅ Painel de Lucro\nResolvido: ${c.mensagem}`, { envios: a.envios + 1 });
+      await enviar(c.chave, `✅ Painel de Lucro\nResolvido: ${c.mensagem}`, a.envios);
     }
   }
   return res;

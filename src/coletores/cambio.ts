@@ -17,10 +17,12 @@ export interface CambioCliente {
   ptaxUsd(deDia: string, ateDia: string): Promise<CotacaoDia[]>;
   /** ECB (Frankfurter): MXN→USD e MXN→BRL por dia, só dias úteis. */
   ecbMxn(deDia: string, ateDia: string): Promise<Cruzada[]>;
+  /** ECB (Frankfurter): USD→BRL por dia — reserva quando o PTAX falha (ex.: HTTP 403). Opcional. */
+  ecbUsd?(deDia: string, ateDia: string): Promise<CotacaoDia[]>;
 }
 
 const PTAX = "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata";
-const FRANKFURTER = "https://api.frankfurter.app";
+const FRANKFURTER = "https://api.frankfurter.dev/v1"; // api.frankfurter.app passou a redirecionar (302) para cá
 const fmtPtax = (d: string) => { const [a, m, dd] = d.split("-"); return `${m}-${dd}-${a}`; };
 
 export const clienteReal: CambioCliente = {
@@ -40,6 +42,12 @@ export const clienteReal: CambioCliente = {
     return Object.entries(j.rates ?? {}).filter(([, v]) => typeof v.USD === "number")
       .map(([dia, v]) => ({ dia, mxnUsd: v.USD!, mxnBrl: typeof v.BRL === "number" ? v.BRL : null })).sort((a, b) => a.dia.localeCompare(b.dia));
   },
+  async ecbUsd(deDia, ateDia) {
+    const r = await fetch(`${FRANKFURTER}/${deDia}..${ateDia}?from=USD&to=BRL`, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
+    if (!r.ok) throw new Error(`Frankfurter (ECB) USD HTTP ${r.status}`);
+    const j = (await r.json()) as { rates: Record<string, { BRL?: number }> };
+    return Object.entries(j.rates ?? {}).filter(([, v]) => typeof v.BRL === "number").map(([dia, v]) => ({ dia, taxa: v.BRL! })).sort((a, b) => a.dia.localeCompare(b.dia));
+  },
 };
 
 async function gravar(dia: string, par: string, taxa: number, fonte: string, provisoria = false) {
@@ -49,7 +57,7 @@ async function gravar(dia: string, par: string, taxa: number, fonte: string, pro
 
 /** Última PTAX USD até o dia (na tabela). */
 async function ptaxUsdAte(dia: string): Promise<number | null> {
-  const [r] = await db.select().from(schema.cambio).where(and(eq(schema.cambio.par, "USDBRL"), lte(schema.cambio.dia, dia), eq(schema.cambio.fonte, "ptax"))).orderBy(desc(schema.cambio.dia)).limit(1);
+  const [r] = await db.select().from(schema.cambio).where(and(eq(schema.cambio.par, "USDBRL"), lte(schema.cambio.dia, dia), sql`${schema.cambio.fonte} in ('ptax', 'ecb_usd')`)).orderBy(desc(schema.cambio.dia)).limit(1);
   return r ? Number(r.taxa) : null;
 }
 
@@ -64,15 +72,25 @@ export async function coletarCambio(cliente: CambioCliente = clienteReal, agora 
     };
     let gravados = 0;
 
-    // 1) USD→BRL pelo PTAX
+    // 1) USD→BRL pelo PTAX; se o PTAX falhar (ex.: HTTP 403), USD→BRL do ECB como reserva (fonte "ecb_usd", só nos dias sem PTAX)
     const dUsd = await janela("USDBRL");
-    const usd = await cliente.ptaxUsd(diaBrasilia(new Date(agora.getTime() - dUsd * 86_400_000)), hoje);
-    for (const c of usd) { await gravar(c.dia, "USDBRL", c.taxa, "ptax"); gravados++; }
+    const deUsd = diaBrasilia(new Date(agora.getTime() - dUsd * 86_400_000));
+    let usd: CotacaoDia[] = []; let fonteUsd = "ptax"; let erroPtax: string | null = null;
+    try { usd = await cliente.ptaxUsd(deUsd, hoje); }
+    catch (e) {
+      erroPtax = e instanceof Error ? e.message : String(e);
+      if (!cliente.ecbUsd) throw e;
+      usd = await cliente.ecbUsd(deUsd, hoje); fonteUsd = "ecb_usd";
+    }
+    for (const c of usd) {
+      if (fonteUsd === "ecb_usd") { const [jaPtax] = await db.select({ dia: schema.cambio.dia }).from(schema.cambio).where(and(eq(schema.cambio.dia, c.dia), eq(schema.cambio.par, "USDBRL"), eq(schema.cambio.fonte, "ptax"))).limit(1); if (jaPtax) continue; }
+      await gravar(c.dia, "USDBRL", c.taxa, fonteUsd); gravados++;
+    }
     if (usd.length && !usd.some((c) => c.dia === hoje)) {
       const [existe] = await db.select().from(schema.cambio).where(and(eq(schema.cambio.dia, hoje), eq(schema.cambio.par, "USDBRL"))).limit(1);
-      if (!existe) await gravar(hoje, "USDBRL", usd[usd.length - 1].taxa, "ptax", true);
+      if (!existe) await gravar(hoje, "USDBRL", usd[usd.length - 1].taxa, fonteUsd, true);
     }
-    detalhe.USDBRL = { janelaDias: dUsd, recebidas: usd.length, ultima: usd[usd.length - 1]?.dia ?? null, fonte: "ptax" };
+    detalhe.USDBRL = { janelaDias: dUsd, recebidas: usd.length, ultima: usd[usd.length - 1]?.dia ?? null, fonte: fonteUsd, ...(erroPtax ? { ptaxFalhou: erroPtax } : {}) };
 
     // 2) MXN→BRL cruzado: PTAX USDBRL (última até o dia) × MXN→USD do ECB; sem PTAX, MXN→BRL direto do ECB
     const dMxn = await janela("MXNBRL");
@@ -105,7 +123,7 @@ export async function coletarCambio(cliente: CambioCliente = clienteReal, agora 
 }
 
 /** Rótulo da fonte da taxa, para a tela. */
-export const ROTULO_FONTE_CAMBIO: Record<string, string> = { ptax: "PTAX", ptax_usd_x_ecb: "PTAX USD × ECB MXN", ecb_direto: "ECB (MXN→BRL direto)", zenith: "Zenith", manual: "manual" };
+export const ROTULO_FONTE_CAMBIO: Record<string, string> = { ptax: "PTAX", ecb_usd: "ECB USD (PTAX indisponível)", ptax_usd_x_ecb: "PTAX USD × ECB MXN", ecb_direto: "ECB (MXN→BRL direto)", zenith: "Zenith", manual: "manual" };
 
 /** Última taxa MXN gravada: dia e fonte (para o selo do painel). */
 export async function ultimaTaxaMxnInfo(): Promise<{ dia: string; fonte: string; taxa: number } | null> {

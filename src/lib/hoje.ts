@@ -36,6 +36,23 @@ export async function dadosHoje(tz = process.env.APP_TZ ?? "America/Sao_Paulo"):
   return { hoje, kie: cred?.kie ?? null, openai: cred?.openai ?? null, limites: cred?.limites ?? null, coletas, agora, tz, problemas };
 }
 
+/** Limite de atraso por fonte (min): Meta 30, IAs 60. Zenith entra por webhook (sem coleta periódica): conta como atrasada só se o webhook estiver sendo rejeitado. */
+export const LIMITE_ATRASO_MIN: Record<string, number> = { meta: 30, openai: 60, kie: 60 };
+export type FonteAtrasada = { fonte: string; rotulo: string; desde: Date | null; limiteMin: number; motivo: string };
+
+export function fontesAtrasadas(coletas: Map<string, EstadoColeta>, agora: Date, webhookZenithRejeitado = false): FonteAtrasada[] {
+  const out: FonteAtrasada[] = [];
+  const rotulos: Record<string, string> = { meta: "Meta", openai: "OpenAI", kie: "kie.ai", zenith: "Zenith" };
+  for (const [fonte, limiteMin] of Object.entries(LIMITE_ATRASO_MIN)) {
+    const c = coletas.get(fonte);
+    if (!c || c.naoConfigurada) continue;
+    const atrasada = !c.ultimaOk || agora.getTime() - c.ultimaOk.getTime() > limiteMin * 60_000;
+    if (atrasada) out.push({ fonte, rotulo: rotulos[fonte], desde: c.ultimaOk, limiteMin, motivo: c.erro ?? "sem coleta ok" });
+  }
+  if (webhookZenithRejeitado) out.push({ fonte: "zenith", rotulo: "Zenith", desde: coletas.get("zenith")?.ultimaOk ?? null, limiteMin: 30, motivo: "webhook rejeitado" });
+  return out;
+}
+
 export function coletaFalhando(c: EstadoColeta | undefined, agora: Date): boolean {
   if (!c) return false;
   if (c.naoConfigurada) return false;

@@ -184,6 +184,12 @@ a, button, select, input, summary, label { touch-action: manipulation; }
 @media (hover: hover) { .bh-item:hover .bh-k { color: var(--text-2); } }
 @media (max-width: 767px) { .barra-hoje { top: 40px; } } /* no celular o topo tem só a marca (40 px) */
 
+/* ---------- fonte atrasada: faixa vermelha e selo "incompleto" ---------- */
+.faixa-atraso { background: var(--neg); color: #fff; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.faixa-atraso a { color: #fff; }
+.faixa-atraso-compacta { border-radius: 0; padding: 6px 16px; font-size: 12px; }
+.bh-incompleto { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--neg); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; vertical-align: middle; }
+
 /* ---------- menu com grupos (desktop) e barra inferior (celular) ---------- */
 .nav-grupo { position: relative; }
 .nav-pop { position: absolute; top: calc(100% + 6px); left: 0; min-width: 200px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--sombra); padding: 6px; display: flex; flex-direction: column; gap: 2px; z-index: 50; }

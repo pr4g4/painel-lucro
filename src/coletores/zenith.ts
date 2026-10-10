@@ -222,6 +222,60 @@ export function dividirCsv(texto: string): string[][] {
   return out;
 }
 
+/**
+ * CSV novo da Zenith (botão "Exportar" na tela de vendas): referencia,cliente,email,pais,metodo,moeda,status,valor
+ * (valor "MX$ 149,00"; status "Aprovada"/"Pendente"), sem data/hora nem taxas, limitado às 200 vendas mais recentes.
+ * Serve só para CONCILIAR status pela referência (não cria venda: sem data não há como lançar receita).
+ */
+export type LinhaExportZenith = { referencia: string; status: VendaZenithBruta["status"]; valor: number | null; moeda: "MXN" | "BRL"; metodo: string; cliente: string; pais: string };
+
+export function ehCsvExportZenith(csv: string): boolean {
+  const cab = (dividirCsv(csv)[0] ?? []).map((h) => h.trim().toLowerCase());
+  return cab.includes("referencia") && !cab.includes("id_venda") && !cab.some((h) => /data|hora|aprov/.test(h));
+}
+
+export function lerCsvExportZenith(csv: string): LinhaExportZenith[] {
+  const linhas = dividirCsv(csv);
+  if (linhas.length < 2) return [];
+  const cab = linhas[0].map((h) => h.trim().toLowerCase());
+  const col = (r: string[], n: string) => { const i = cab.indexOf(n); return i >= 0 ? (r[i] ?? "").trim() : ""; };
+  const num = (s: string) => { const limpo = s.replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", "."); const n = Number(limpo); return limpo && Number.isFinite(n) ? n : null; };
+  const st = (x: string): VendaZenithBruta["status"] => { const s = x.toLowerCase(); return /aprov|pago|paid|captur/.test(s) ? "aprovada" : /reemb|refund|estorn/.test(s) ? "reembolsada" : /charge/.test(s) ? "chargeback" : /cancel/.test(s) ? "cancelada" : "pendente"; };
+  const out: LinhaExportZenith[] = [];
+  for (const r of linhas.slice(1)) {
+    const referencia = col(r, "referencia"); if (!referencia) continue;
+    const valorTxt = col(r, "valor");
+    out.push({ referencia, status: st(col(r, "status")), valor: num(valorTxt), moeda: col(r, "moeda").toUpperCase() === "BRL" || /^R\$/.test(valorTxt) ? "BRL" : "MXN", metodo: col(r, "metodo"), cliente: col(r, "cliente"), pais: col(r, "pais") });
+  }
+  return out;
+}
+
+export type ResultadoConciliacao = { total: number; atualizadas: string[]; jaIguais: number; naoEncontradas: string[]; valorDiferente: string[]; limite200: boolean };
+
+/** Concilia status pela referência: pendente → aprovada (e reembolso/chargeback) nas vendas que o painel já tem; lista as que não tem. */
+export async function conciliarPorReferencia(linhas: LinhaExportZenith[], agora = new Date()): Promise<ResultadoConciliacao> {
+  const r: ResultadoConciliacao = { total: linhas.length, atualizadas: [], jaIguais: 0, naoEncontradas: [], valorDiferente: [], limite200: linhas.length === 200 };
+  for (const l of linhas) {
+    const v = await acharVendaZenith([l.referencia]);
+    if (!v) { r.naoEncontradas.push(l.referencia); continue; }
+    if (l.valor != null && Math.abs(Number(v.brutoOriginal) - l.valor) > 0.01) r.valorDiferente.push(`${l.referencia}: painel ${v.moeda} ${Number(v.brutoOriginal)} × CSV ${l.moeda} ${l.valor}`);
+    if (v.status === l.status) { r.jaIguais++; continue; }
+    // só avançamos status (pendente → aprovada/reembolsada/chargeback; aprovada → reembolsada/chargeback); nunca voltamos para pendente
+    const avanca = (v.status === "pendente" && l.status !== "pendente") || (v.status === "aprovada" && (l.status === "reembolsada" || l.status === "chargeback"));
+    if (!avanca) { r.jaIguais++; continue; }
+    const quando = v.aprovadaEm ?? v.criadaEm ?? agora; // o CSV não traz hora: usa a da criação (pedido) e deixa registrado
+    await db.update(schema.vendas).set({
+      status: l.status,
+      aprovadaEm: l.status === "aprovada" || l.status === "reembolsada" || l.status === "chargeback" ? (v.aprovadaEm ?? quando) : v.aprovadaEm,
+      reembolsadaEm: l.status === "reembolsada" || l.status === "chargeback" ? (v.reembolsadaEm ?? agora) : v.reembolsadaEm,
+      observacao: `${v.observacao ? `${v.observacao} · ` : ""}status ${v.status} → ${l.status} conciliado por CSV de exportação em ${agora.toISOString()} (sem hora no CSV: usada a do pedido)`,
+      payload: { ...((v.payload as Record<string, unknown>) ?? {}), conciliacao_export: { status: l.status, metodo: l.metodo, pais: l.pais, em: agora.toISOString() } },
+    }).where(eq(schema.vendas.id, v.id));
+    r.atualizadas.push(`${l.referencia} (${v.status} → ${l.status})`);
+  }
+  return r;
+}
+
 /** Detecta o formato pelo cabeçalho: nativo da Zenith (id_venda;…) ou genérico. */
 export function lerCsvZenithAuto(csv: string): VendaZenithBruta[] {
   const cab = (dividirCsv(csv)[0] ?? []).map((h) => h.trim().toLowerCase());

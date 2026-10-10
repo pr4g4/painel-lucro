@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { invalidarDados } from "@/lib/cache";
 import { exigirSessao } from "@/lib/auth/sessao";
-import { lerCsvZenithAuto, importarVendasZenith } from "@/coletores/zenith";
+import { lerCsvZenithAuto, importarVendasZenith, ehCsvExportZenith, lerCsvExportZenith, conciliarPorReferencia } from "@/coletores/zenith";
 
 export async function importarCsv(_prev: { ok?: boolean; mensagem?: string } | undefined, form: FormData): Promise<{ ok?: boolean; mensagem?: string }> {
   await exigirSessao("edita");
@@ -10,6 +10,18 @@ export async function importarCsv(_prev: { ok?: boolean; mensagem?: string } | u
   const colado = String(form.get("csv") ?? "");
   const texto = arquivo instanceof File && arquivo.size > 0 ? await arquivo.text() : colado;
   if (!texto.trim()) return { ok: false, mensagem: "Envie um arquivo CSV ou cole o conteúdo." };
+  if (ehCsvExportZenith(texto)) {
+    // formato novo ("Exportar" na tela de vendas): só concilia status pela referência
+    const linhas = lerCsvExportZenith(texto);
+    if (!linhas.length) return { ok: false, mensagem: "CSV de exportação sem linhas com referência." };
+    const r = await conciliarPorReferencia(linhas);
+    revalidatePath("/"); invalidarDados(); revalidatePath("/dre"); revalidatePath("/lancamentos");
+    const partes = [`${r.total} linha(s) do CSV de exportação da Zenith.`, `${r.atualizadas.length} status atualizado(s)${r.atualizadas.length ? `: ${r.atualizadas.slice(0, 10).join(", ")}${r.atualizadas.length > 10 ? "…" : ""}` : ""}.`, `${r.jaIguais} já estavam iguais.`];
+    if (r.naoEncontradas.length) partes.push(`${r.naoEncontradas.length} referência(s) que o painel NÃO tem (webhook não entregou; importe o CSV de Conciliação, que traz data e taxas): ${r.naoEncontradas.slice(0, 20).join(", ")}${r.naoEncontradas.length > 20 ? "…" : ""}.`);
+    if (r.valorDiferente.length) partes.push(`Valor diferente em ${r.valorDiferente.length}: ${r.valorDiferente.slice(0, 5).join("; ")}.`);
+    if (r.limite200) partes.push("ATENÇÃO: o arquivo tem exatamente 200 linhas — a Zenith corta nas 200 vendas mais recentes; exporte dia por dia para não perder vendas.");
+    return { ok: true, mensagem: partes.join(" ") };
+  }
   const vendas = lerCsvZenithAuto(texto);
   if (!vendas.length) return { ok: false, mensagem: "Não encontrei linhas de venda no CSV (esperado o arquivo de Conciliação da Zenith, com id_venda; ou um CSV com id, status, data, bruto…)." };
   const r = await importarVendasZenith(vendas, "zenith");
