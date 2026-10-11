@@ -41,14 +41,18 @@ export function projecaoMes(dreMes: ResultadoDRE, agora: Date, tz: string, inici
   };
 }
 
-function metaComImposto(l: LancamentoCalc, params: Parametro[]): number {
+/** Gasto de anúncio com imposto: Meta (imposto_meta_pct) ou TikTok (imposto_tiktok_pct). */
+export function anuncioComImposto(l: LancamentoCalc, params: Parametro[]): number {
+  if (l.fonte === "tiktok") return l.valorBrl * fatorImpostoMeta(numeroVigente(params, "imposto_tiktok_pct", l.instante, 0));
   return l.valorBrl * fatorImpostoMeta(numeroVigente(params, "imposto_meta_pct", l.instante, 12.15));
 }
+const metaComImposto = anuncioComImposto;
+const ehAnuncio = (l: LancamentoCalc) => l.fonte === "meta" || l.fonte === "tiktok";
 
 /** 24 posições (hora local 0–23) com o gasto Meta com imposto. Só vale com dado por hora. */
 export function gastoMetaPorHoraDoDia(lancamentos: LancamentoCalc[], periodo: Periodo, tz: string, params: Parametro[], incluirHistorico = false): number[] | Indisponivel {
-  const meta = lancamentos.filter((l) => l.fonte === "meta" && dentro(l.instante, periodo) && (incluirHistorico || !l.historico));
-  if (meta.length === 0) return { indisponivel: "sem gasto Meta no período" };
+  const meta = lancamentos.filter((l) => ehAnuncio(l) && dentro(l.instante, periodo) && (incluirHistorico || !l.historico));
+  if (meta.length === 0) return { indisponivel: "sem gasto de anúncios no período" };
   const porHora = meta.filter((l) => l.granularidade === "hora");
   if (porHora.length === 0) return { indisponivel: "a Meta só entregou dado diário para estas contas" };
   const horas = new Array(24).fill(0) as number[];
@@ -63,8 +67,8 @@ export function extrairNumeroWhatsapp(nome: string): string | null {
 
 /** Gasto Meta com imposto por número de WhatsApp do nome da campanha. Campanha sem número vai para "sem número". */
 export function gastoPorNumero(lancamentos: LancamentoCalc[], periodo: Periodo, params: Parametro[], incluirHistorico = false): { numero: string; gasto: number; campanhas: number }[] | Indisponivel {
-  const meta = lancamentos.filter((l) => l.fonte === "meta" && dentro(l.instante, periodo) && (incluirHistorico || !l.historico));
-  if (meta.length === 0) return { indisponivel: "sem gasto Meta no período" };
+  const meta = lancamentos.filter((l) => ehAnuncio(l) && dentro(l.instante, periodo) && (incluirHistorico || !l.historico));
+  if (meta.length === 0) return { indisponivel: "sem gasto de anúncios no período" };
   const g = new Map<string, { gasto: number; camps: Set<string> }>();
   for (const l of meta) {
     const n = extrairNumeroWhatsapp(l.descricao) ?? "sem número";

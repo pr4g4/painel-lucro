@@ -5,7 +5,7 @@ import { useState } from "react";
 export type PontoGrafico = { rotulo: string; receita: number; meta: number; zapdata: number; ia: number; operacao: number; lucro: number };
 
 const SERIES = [
-  ["receita", "Receita líquida", "var(--s1)"], ["meta", "Meta c/ imposto", "var(--s2)"], ["zapdata", "ZapData", "var(--s3)"], ["ia", "IA", "var(--s4)"], ["operacao", "Operação", "var(--s5)"],
+  ["receita", "Receita líquida", "var(--s1)"], ["meta", "Anúncios c/ imposto", "var(--s2)"], ["zapdata", "ZapData", "var(--s3)"], ["ia", "IA", "var(--s4)"], ["operacao", "Operação", "var(--s5)"],
 ] as const;
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(v);

@@ -114,6 +114,10 @@ export type ResultadoDRE = {
     metaExibido: number;
     metaImposto: number;
     metaComImposto: number;
+    tiktokExibido: number;
+    tiktokImposto: number;
+    tiktokComImposto: number;
+    anunciosComImposto: number; // Meta + TikTok, com imposto
     zapdata: number;
     ia: number;
     iaKie: number;

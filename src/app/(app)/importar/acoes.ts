@@ -29,3 +29,21 @@ export async function importarCsv(_prev: { ok?: boolean; mensagem?: string } | u
   const aprovadas = vendas.filter((v) => v.status === "aprovada").length, pendentes = vendas.filter((v) => v.status === "pendente").length;
   return r.ok ? { ok: true, mensagem: `${r.registros} venda(s) importadas/atualizadas: ${aprovadas} aprovada(s), ${pendentes} pendente(s), ${vendas.length - aprovadas - pendentes} outra(s). Importar de novo não duplica.` } : { ok: false, mensagem: `Falhou: ${r.erro}` };
 }
+
+/** CSV do TikTok Ads Manager: gasto por campanha por dia (ou hora), na moeda da conta. */
+export async function importarCsvTikTokAcao(_prev: { ok?: boolean; mensagem?: string } | undefined, form: FormData): Promise<{ ok?: boolean; mensagem?: string }> {
+  await exigirSessao("edita");
+  const { lerCsvTikTok, importarCsvTikTok } = await import("@/coletores/tiktok");
+  const arquivo = form.get("arquivo");
+  const colado = String(form.get("csv") ?? "");
+  const moeda = ["USD", "MXN", "BRL"].includes(String(form.get("moeda"))) ? String(form.get("moeda")) : "USD";
+  const texto = arquivo instanceof File && arquivo.size > 0 ? await arquivo.text() : colado;
+  if (!texto.trim()) return { ok: false, mensagem: "Envie o arquivo exportado do TikTok Ads Manager ou cole o conteúdo." };
+  const linhas = lerCsvTikTok(texto);
+  if (!linhas.length) return { ok: false, mensagem: "Não encontrei colunas de campanha, data e custo no arquivo. Exporte o relatório do Ads Manager com as colunas Nome da campanha, Data (por dia ou por hora) e Custo." };
+  const r = await importarCsvTikTok(linhas, moeda);
+  revalidatePath("/"); invalidarDados(); revalidatePath("/dre"); revalidatePath("/campanhas"); revalidatePath("/lancamentos");
+  const total = linhas.reduce((s, l) => s + l.custo, 0);
+  const dias = new Set(linhas.map((l) => l.quando.toISOString().slice(0, 10)));
+  return r.ok ? { ok: true, mensagem: `${r.registros} linha(s) do TikTok gravadas: ${linhas.length} registro(s), ${dias.size} dia(s), total ${moeda} ${total.toFixed(2)} (${linhas[0].granularidade === "hora" ? "por hora" : "por dia"}). Importar de novo não duplica.` } : { ok: false, mensagem: `Falhou: ${r.erro}` };
+}

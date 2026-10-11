@@ -2,14 +2,15 @@ import { coletarCambio, clienteReal as cambioReal } from "./cambio";
 import { coletarMeta, metaClienteReal } from "./meta";
 import { coletarOpenAI, openaiClienteReal } from "./openai";
 import { coletarKie, kieClienteReal } from "./kie";
+import { coletarTikTok, tiktokClienteReal } from "./tiktok";
 import { abrirAviso, type ResultadoColeta } from "./base";
 import { db, schema } from "@/db";
 
-export const FONTES = ["cambio", "meta", "openai", "kie", "zenith"] as const;
+export const FONTES = ["cambio", "meta", "tiktok", "openai", "kie", "zenith"] as const;
 export type Fonte = (typeof FONTES)[number];
 
 export const ROTULO_FONTE: Record<string, string> = {
-  cambio: "Câmbio", meta: "Meta Ads", openai: "OpenAI", kie: "kie.ai", zenith: "Zenith", manual: "Manual", zapdata: "ZapData",
+  cambio: "Câmbio", meta: "Meta Ads", tiktok: "TikTok Ads", openai: "OpenAI", kie: "kie.ai", zenith: "Zenith", manual: "Manual", zapdata: "ZapData",
 };
 
 /** Roda um coletor real com as variáveis do servidor. Fonte sem chave vira aviso "não configurada", não erro. */
@@ -21,6 +22,12 @@ export async function coletar(fonte: Fonte): Promise<ResultadoColeta> {
       const contas = [process.env.META_ACT_00, process.env.META_ACT_01].filter(Boolean) as string[];
       if (!token || !contas.length) return naoConfigurada("meta", "META_TOKEN / META_ACT_00 / META_ACT_01");
       return coletarMeta(metaClienteReal(token), contas);
+    }
+    case "tiktok": {
+      const token = process.env.TIKTOK_ACCESS_TOKEN;
+      const contas = (process.env.TIKTOK_ADVERTISER_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      if (!token || !contas.length) return naoConfigurada("tiktok", "TIKTOK_ACCESS_TOKEN / TIKTOK_ADVERTISER_IDS");
+      return coletarTikTok(tiktokClienteReal(token), contas);
     }
     case "openai": {
       const k = process.env.OPENAI_ADMIN_KEY;

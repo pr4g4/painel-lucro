@@ -24,7 +24,7 @@ export default async function Avisos() {
       <div className="card p-3 text-sm">
         <h2 className="font-semibold mb-2">Estado das fontes</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {["meta", "zenith", "cambio", "openai", "kie"].map((f) => {
+          {["meta", "tiktok", "zenith", "cambio", "openai", "kie"].map((f) => {
             const c = coletas.get(f);
             const atras = !c?.ultimaOk || agora - c.ultimaOk.getTime() > 30 * 60_000;
             return <div key={f} className={`card p-2 ${atras && f !== "zenith" ? "border-warn" : ""}`}><b>{ROTULO_FONTE[f]}</b><div className="text-xs text-ink-2">última coleta ok: {c?.ultimaOk ? fmtDataHora(c.ultimaOk, TZ, "dd/MM HH:mm") : "nunca"}{c?.erro && <div className="text-neg">erro: {c.erro}</div>}{c?.falhasSeguidas ? <div className="text-warn">{c.falhasSeguidas} falha(s) seguida(s)</div> : null}</div></div>;

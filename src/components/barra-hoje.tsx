@@ -9,7 +9,7 @@ const COR: Record<Semaforo, string> = { verde: "var(--pos)", amarelo: "var(--war
 export async function BarraHoje({ webhookZenithRejeitado = false }: { webhookZenithRejeitado?: boolean } = {}) {
   const d = await dadosHoje();
   const atrasos = fontesAtrasadas(d.coletas, d.agora, webhookZenithRejeitado);
-  const incompleto = atrasos.some((a) => a.fonte === "meta" || a.fonte === "zenith");
+  const incompleto = atrasos.some((a) => a.fonte === "meta" || a.fonte === "tiktok" || a.fonte === "zenith");
   void avaliarAgendadorSeParado(d);
   const t = d.hoje?.totais;
   const sk = semaforoSaldo(d.kie, coletaFalhando(d.coletas.get("kie"), d.agora));
@@ -25,7 +25,7 @@ export async function BarraHoje({ webhookZenithRejeitado = false }: { webhookZen
           <span className={`bh-v num ${t ? (t.lucroLiquido >= 0 ? "pos" : "neg") : ""}`}>{t ? fmtBRL(t.lucroLiquido) : "—"}</span>
         </Link>
         <Link href="/dre?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">Receita líq.</span><span className="bh-v num">{t ? fmtBRL(t.receitaLiquida) : "—"}</span></Link>
-        <Link href="/campanhas?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">Meta c/ imp.</span><span className="bh-v num">{t ? fmtBRL(t.metaComImposto) : "—"}</span></Link>
+        <Link href="/campanhas?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">{t && t.tiktokComImposto > 0 ? "Anúncios c/ imp." : "Meta c/ imp."}</span><span className="bh-v num">{t ? fmtBRL(t.anunciosComImposto) : "—"}</span></Link>
         <Link href="/custos?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">IA</span><span className="bh-v num">{t ? fmtBRL(t.ia) : "—"}</span></Link>
         <Link href="/detalhes#creditos" prefetch={false} className="bh-item" title={d.kie?.indisponivel ?? ""}>
           <span className="bh-k"><i className="bh-luz" style={{ background: COR[sk] }} />kie.ai</span>

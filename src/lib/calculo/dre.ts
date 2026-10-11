@@ -66,6 +66,15 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
   const metaPorConta = agrupar(meta, (l) => l.contaId ?? "sem conta", (l) => l.valorBrl * fatorImpostoMeta(numeroVigente(params, "imposto_meta_pct", l.instante)));
   const metaPorFrente = agrupar(meta, (l) => l.frente ?? "sem frente", (l) => l.valorBrl * fatorImpostoMeta(numeroVigente(params, "imposto_meta_pct", l.instante)));
 
+  // ---------- TikTok (mesma regra da Meta, imposto próprio) ----------
+  const tiktok = e.lancamentos.filter((l) => l.fonte === "tiktok" && conta(l.historico) && dentro(l.instante, p));
+  const tiktokExibido = soma(tiktok.map((l) => l.valorBrl));
+  const tiktokComImposto = soma(tiktok.map((l) => l.valorBrl * fatorImpostoMeta(numeroVigente(params, "imposto_tiktok_pct", l.instante, 0))));
+  const tiktokImposto = tiktokComImposto - tiktokExibido;
+  const tiktokPorFrente = agrupar(tiktok, (l) => l.frente ?? "sem frente", (l) => l.valorBrl * fatorImpostoMeta(numeroVigente(params, "imposto_tiktok_pct", l.instante, 0)));
+  const anunciosComImposto = metaComImposto + tiktokComImposto;
+  const temTiktok = e.lancamentos.some((l) => l.fonte === "tiktok");
+
   // ---------- IA ----------
   const ia = e.lancamentos.filter((l) => (l.fonte === "openai" || l.fonte === "kie") && l.tipo === "uso_ia" && conta(l.historico) && dentro(l.instante, p));
   const iaKie = soma(ia.filter((l) => l.fonte === "kie").map((l) => l.valorBrl));
@@ -91,14 +100,14 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
   const iaTotal = iaKie + iaOpenai + iaManual;
 
   // ---------- Lucro ----------
-  const custosTotais = metaComImposto + zapdata + iaTotal + operacao;
+  const custosTotais = anunciosComImposto + zapdata + iaTotal + operacao;
   const lucroBruto = receitaLiquida - custosTotais + entradasManuais;
 
   // Imposto sobre lucro: parâmetro vigente no FIM do período (período fechado usa a regra daquele momento)
   const refImposto = new Date(Math.min(p.fim.getTime() - 1, Date.now()));
   const impostoPct = numeroVigente(params, "imposto_lucro_pct", refImposto, 8);
   const base = textoVigente(params, "imposto_lucro_base", refImposto, "a");
-  const baseValor = base === "b" ? receitaLiquida : base === "c" ? receitaLiquida - metaComImposto : lucroBruto;
+  const baseValor = base === "b" ? receitaLiquida : base === "c" ? receitaLiquida - anunciosComImposto : lucroBruto;
   const impostoLucro = Math.max(0, baseValor) * (impostoPct / 100);
   const lucroLiquido = lucroBruto - impostoLucro;
 
@@ -142,6 +151,11 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
       informativo: true,
       filhos: [...filhos(metaPorConta, "meta_conta"), ...filhos(metaPorFrente, "meta_frente")],
     }),
+    ...(temTiktok ? [
+      L("tiktok_exibido", "(−) TikTok exibido", -tiktokExibido, 1),
+      L("tiktok_imposto", "(−) Imposto TikTok", -tiktokImposto, 1),
+      L("tiktok_com_imposto", "TikTok com imposto (soma das duas acima)", -tiktokComImposto, 2, { informativo: true, filhos: filhos(tiktokPorFrente, "tiktok_frente") }),
+    ] : []),
     L("zapdata", "(−) ZapData diluído", -zapdata, 1),
     L("ia", "(−) IA", -iaTotal, 1, {
       filhos: [L("ia:kie", "kie.ai", -iaKie, 2), L("ia:openai", "OpenAI", -iaOpenai, 2), ...(iaManual ? [L("ia:manual", "IA (manual)", -iaManual, 2)] : [])],
@@ -161,15 +175,15 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
     linhas,
     totais: {
       receitaBrutaMxn, receitaBrutaBrl, taxaZenithPct, taxaZenithFixa, cambioZenith, reembolsos, receitaLiquida,
-      metaExibido, metaImposto, metaComImposto, zapdata, ia: iaTotal, iaKie, iaOpenai, iaManual, operacao, entradasManuais,
+      metaExibido, metaImposto, metaComImposto, tiktokExibido, tiktokImposto, tiktokComImposto, anunciosComImposto, zapdata, ia: iaTotal, iaKie, iaOpenai, iaManual, operacao, entradasManuais,
       custosTotais, lucroBruto, impostoLucro, lucroLiquido, porSocio: lucroLiquido / 2,
       reservaRetida, pendentesQtd: pendentes.length, pendentesValor, numVendas, numReembolsos: reembolsadasNoPeriodo.length,
     },
     indicadores: {
-      roas: receitaLiquida > 0 ? div(receitaLiquida, metaComImposto) : null,
-      poas: receitaLiquida > 0 ? div(lucroBruto, metaComImposto) : null,
+      roas: receitaLiquida > 0 ? div(receitaLiquida, anunciosComImposto) : null,
+      poas: receitaLiquida > 0 ? div(lucroBruto, anunciosComImposto) : null,
       margemLiquida: div(lucroLiquido, receitaLiquida),
-      custoPorVenda: div(metaComImposto, numVendas),
+      custoPorVenda: div(anunciosComImposto, numVendas),
       ticketMedioLiquido: div(receitaLiquida, numVendas),
       pontoEquilibrio: Math.max(0, -lucroBruto),
     },

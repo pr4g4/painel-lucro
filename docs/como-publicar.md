@@ -91,3 +91,17 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
 - Site abre mas dá erro 500: quase sempre `DATABASE_URL` errada (senha ou `[YOUR-PASSWORD]` não trocado). Corrija em Settings → Environment Variables → Redeploy.
 - "Fonte X não configurada" em Avisos: falta a chave daquela fonte; normal até você colar.
 - Projeto do Supabase "paused": clique **Restore project** (acontece se ficar 7 dias sem uso).
+
+## TikTok Ads (gasto de anúncios)
+Dois jeitos de o gasto do TikTok entrar no painel. Nenhum muda a Meta.
+
+**A) Pela API (automático, a cada 10 min)** — precisa de um token do Marketing API:
+1. Entre em https://business-api.tiktok.com/portal/ com a conta do TikTok for Business → **My Apps** → **Create an App** (nome "Painel de Lucro", tipo Marketing API). Em "Scope of permission" marque **Ad Account Management → Read** e **Reporting → Read**.
+2. Depois de criado, abra o app → **Authorization**: copie a *authorization URL*, abra no navegador, escolha a conta de anúncios e autorize. Na página de retorno aparece o **auth_code**; no app, use "Generate Access Token" com esse código (ou a tela "Get Long-term Access Token"). O token de longa duração não expira sozinho.
+3. Anote o **Advertiser ID** (Ads Manager → canto superior, ao lado do nome da conta).
+4. Na Vercel: Settings → Environment Variables → `TIKTOK_ACCESS_TOKEN` (o token) e `TIKTOK_ADVERTISER_IDS` (um ou mais ids separados por vírgula) → Redeploy.
+5. Em 10 min a fonte "TikTok Ads" aparece em Avisos → Estado das fontes. Erro de token ou permissão vem explicado em português.
+
+**B) Sem API (manual)** — Ads Manager → Relatórios → exportar por campanha com as colunas Nome da campanha, Data (por dia ou por hora) e Custo → em **/importar**, bloco "TikTok Ads (CSV)", escolha a moeda da conta e suba o arquivo. Importar de novo não duplica.
+
+Na DRE o TikTok tem linhas próprias ("TikTok exibido" e "Imposto TikTok"); o imposto é o parâmetro **imposto_tiktok_pct** (padrão 0 — ajuste em /parametros se a fatura do TikTok tiver imposto como a da Meta). ROAS, custo por venda e "Anúncios" somam Meta + TikTok. As campanhas do TikTok entram em /campanhas e seguem a mesma regra de frente e de número de WhatsApp pelo nome.

@@ -37,12 +37,12 @@ export async function dadosHoje(tz = process.env.APP_TZ ?? "America/Sao_Paulo"):
 }
 
 /** Limite de atraso por fonte (min): Meta 30, IAs 60. Zenith entra por webhook (sem coleta periódica): conta como atrasada só se o webhook estiver sendo rejeitado. */
-export const LIMITE_ATRASO_MIN: Record<string, number> = { meta: 30, openai: 60, kie: 60 };
+export const LIMITE_ATRASO_MIN: Record<string, number> = { meta: 30, tiktok: 30, openai: 60, kie: 60 };
 export type FonteAtrasada = { fonte: string; rotulo: string; desde: Date | null; limiteMin: number; motivo: string };
 
 export function fontesAtrasadas(coletas: Map<string, EstadoColeta>, agora: Date, webhookZenithRejeitado = false): FonteAtrasada[] {
   const out: FonteAtrasada[] = [];
-  const rotulos: Record<string, string> = { meta: "Meta", openai: "OpenAI", kie: "kie.ai", zenith: "Zenith" };
+  const rotulos: Record<string, string> = { meta: "Meta", tiktok: "TikTok", openai: "OpenAI", kie: "kie.ai", zenith: "Zenith" };
   for (const [fonte, limiteMin] of Object.entries(LIMITE_ATRASO_MIN)) {
     const c = coletas.get(fonte);
     if (!c || c.naoConfigurada) continue;

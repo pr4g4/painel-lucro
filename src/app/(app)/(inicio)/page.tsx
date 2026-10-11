@@ -33,7 +33,7 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
 
   const atrasos = fontesAtrasadas(coletas, estado.agora, avisosAb.some((x) => x.tipo === "webhook_rejeitado"));
   const periodoTocaHoje = estado.periodo.fim.getTime() > estado.agora.getTime() - 60 * 60_000;
-  const incompleto = periodoTocaHoje && atrasos.some((x) => x.fonte === "meta" || x.fonte === "zenith");
+  const incompleto = periodoTocaHoje && atrasos.some((x) => x.fonte === "meta" || x.fonte === "tiktok" || x.fonte === "zenith");
   const varLucro = textoVariacao(t.lucroLiquido, a.lucroLiquido, temBaseAnterior, "moeda", estado.moeda, taxaMxn);
   const acum = lucroAcumulado(ctx.entrada, estado.periodo, estado.tz);
   // rótulo do fim: "24h" quando o período fecha à meia-noite (Ontem), senão a hora/dia do fim
@@ -83,7 +83,7 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
 
         <section className="blocos" aria-label="Números do período">
           {bloco("receita", "Receita líquida", t.receitaLiquida, a.receitaLiquida)}
-          {bloco("meta", "Meta c/ imposto", t.metaComImposto, a.metaComImposto, true)}
+          {t.tiktokComImposto > 0 || a.tiktokComImposto > 0 ? bloco("anuncios", "Anúncios (Meta + TikTok)", t.anunciosComImposto, a.anunciosComImposto, true) : bloco("meta", "Meta c/ imposto", t.metaComImposto, a.metaComImposto, true)}
           {bloco("ia", "IA", t.ia, a.ia, true)}
           {bloco("vendas", "Nº de vendas", t.numVendas, a.numVendas, false, true)}
         </section>

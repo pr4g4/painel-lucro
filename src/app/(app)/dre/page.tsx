@@ -19,7 +19,7 @@ export default async function PaginaDRE({ searchParams }: { searchParams: Promis
   const avisosAb = await avisosAbertos().catch(() => []);
   const atrasos = fontesAtrasadas(ctx.coletas, estado.agora, avisosAb.some((a) => a.tipo === "webhook_rejeitado"));
   const periodoTocaHoje = estado.periodo.fim.getTime() > estado.agora.getTime() - 60 * 60_000;
-  const incompleto = periodoTocaHoje && atrasos.some((a) => a.fonte === "meta" || a.fonte === "zenith");
+  const incompleto = periodoTocaHoje && atrasos.some((a) => a.fonte === "meta" || a.fonte === "tiktok" || a.fonte === "zenith");
   return (
     <>
       <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>

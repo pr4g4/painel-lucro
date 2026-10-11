@@ -42,6 +42,7 @@ export function fatorImpostoMeta(pct: number): number {
 export const PARAMETROS_PADRAO: Record<string, { valor: string; observacao: string }> = {
   marco_zero: { valor: "2026-10-03T03:00:00.000Z", observacao: "03/10/2026 00:00 Brasília. Tudo antes é histórico." },
   imposto_meta_pct: { valor: "12.15", observacao: "Imposto sobre anúncios da Meta. Gasto com imposto = exibido ÷ (1 − 12,15%)." },
+  imposto_tiktok_pct: { valor: "0", observacao: "Imposto sobre anúncios do TikTok (mesma regra da Meta: exibido ÷ (1 − %)). 0 = o valor exibido já é o custo final." },
   taxa_zenith_pct: { valor: "7.99", observacao: "Taxa percentual da Zenith sobre o bruto." },
   taxa_zenith_fixa_mxn: { valor: "5", observacao: "Taxa fixa por venda em MXN (venda em pesos)." },
   taxa_zenith_fixa_brl: { valor: "5", observacao: "Taxa fixa por venda em BRL (venda em reais)." },

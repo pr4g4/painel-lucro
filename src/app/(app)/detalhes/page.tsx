@@ -44,7 +44,7 @@ export default async function Detalhes({ searchParams }: { searchParams: Promise
   ]);
   const atrasos = fontesAtrasadas(coletas, estado.agora, avisosAb.some((a) => a.tipo === "webhook_rejeitado"));
   const periodoTocaHoje = estado.periodo.fim.getTime() > estado.agora.getTime() - 60 * 60_000;
-  const incompleto = periodoTocaHoje && atrasos.some((a) => a.fonte === "meta" || a.fonte === "zenith");
+  const incompleto = periodoTocaHoje && atrasos.some((a) => a.fonte === "meta" || a.fonte === "tiktok" || a.fonte === "zenith");
   const mesBruto = resolverAtalho("mes_atual", estado.agora, estado.marcoZero, estado.tz).periodo;
   const mesP = { inicio: new Date(Math.max(mesBruto.inicio.getTime(), estado.marcoZero.getTime())), fim: mesBruto.fim }; // mesma base do "desde o marco zero"
   const mes = ctx.calc(mesP);
@@ -53,7 +53,7 @@ export default async function Detalhes({ searchParams }: { searchParams: Promise
   const d = { moeda: estado.moeda, taxaMxn };
   const money = (v: number | null | undefined) => fmtMoeda(v, estado.moeda, taxaMxn);
   const base = { ...d, temBase: temBaseAnterior };
-  const dadosGrafico = fatias.map((f) => ({ rotulo: f.rotulo, receita: f.dre.totais.receitaLiquida, meta: f.dre.totais.metaComImposto, zapdata: f.dre.totais.zapdata, ia: f.dre.totais.ia, operacao: f.dre.totais.operacao, lucro: f.dre.totais.lucroLiquido }));
+  const dadosGrafico = fatias.map((f) => ({ rotulo: f.rotulo, receita: f.dre.totais.receitaLiquida, meta: f.dre.totais.anunciosComImposto, zapdata: f.dre.totais.zapdata, ia: f.dre.totais.ia, operacao: f.dre.totais.operacao, lucro: f.dre.totais.lucroLiquido }));
   const serieLucro = fatias.map((f) => f.dre.totais.lucroLiquido);
   const varLucro = textoVariacao(t.lucroLiquido, a.lucroLiquido, temBaseAnterior, "moeda", estado.moeda, taxaMxn);
   const atrasadas = [...coletas.entries()].filter(([f, c]) => f !== "zenith" && !c.naoConfigurada && (!c.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000));
@@ -111,7 +111,7 @@ export default async function Detalhes({ searchParams }: { searchParams: Promise
       {/* quatro números secundários, sem caixas */}
       <section className="secundarios" aria-label="Números do período">
         <Metrica rotulo="Receita líquida" valor={t.receitaLiquida} anterior={a.receitaLiquida} {...base} />
-        <Metrica rotulo="Meta com imposto" valor={t.metaComImposto} anterior={a.metaComImposto} inverterSinal {...base} />
+        <Metrica rotulo={t.tiktokComImposto > 0 ? "Anúncios (Meta + TikTok)" : "Meta com imposto"} valor={t.anunciosComImposto} anterior={a.anunciosComImposto} inverterSinal {...base} />
         <Metrica rotulo="IA (kie.ai + OpenAI)" valor={t.ia} anterior={a.ia} inverterSinal {...base} />
         <Metrica rotulo="Nº de vendas" valor={t.numVendas} anterior={a.numVendas} formato="int" temBase={temBaseAnterior} />
       </section>
@@ -137,9 +137,10 @@ export default async function Detalhes({ searchParams }: { searchParams: Promise
         <p className="text-xs text-ink-3">Semáforo da IA por venda: verde abaixo de 25 % do ticket médio líquido, amarelo de 25 a 40 %, vermelho acima de 40 %.</p>
       </Secao>
 
-      <Secao id="custos" titulo="Custos detalhados" resumo={`total ${money(t.metaComImposto + t.zapdata + t.ia + t.operacao)}`}>
+      <Secao id="custos" titulo="Custos detalhados" resumo={`total ${money(t.anunciosComImposto + t.zapdata + t.ia + t.operacao)}`}>
         <div className="grade-metricas">
           <Metrica rotulo="Meta com imposto" valor={t.metaComImposto} anterior={a.metaComImposto} inverterSinal {...base} />
+          {(t.tiktokComImposto > 0 || a.tiktokComImposto > 0) && <Metrica rotulo="TikTok com imposto" valor={t.tiktokComImposto} anterior={a.tiktokComImposto} inverterSinal {...base} />}
           <Metrica rotulo="ZapData" valor={t.zapdata} anterior={a.zapdata} inverterSinal {...base} />
           <Metrica rotulo="IA (kie.ai + OpenAI)" valor={t.ia} anterior={a.ia} inverterSinal {...base} />
           <Metrica rotulo="Operação" valor={t.operacao} anterior={a.operacao} inverterSinal {...base} />
@@ -194,7 +195,7 @@ export default async function Detalhes({ searchParams }: { searchParams: Promise
 
       <Secao id="fontes" titulo="Fontes e atualização" resumo={agendadorHa == null ? "agendador nunca rodou" : `agendador há ${agendadorHa} min${atrasadas.length ? ` · ${atrasadas.length} fonte(s) atrasada(s)` : ""}`}>
         <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2">
-          {["meta", "zenith", "cambio", "openai", "kie"].map((f) => {
+          {["meta", "tiktok", "zenith", "cambio", "openai", "kie"].map((f) => {
             const c = coletas.get(f);
             const atras = !c?.ultimaOk || estado.agora.getTime() - c.ultimaOk.getTime() > 30 * 60_000;
             let texto = c?.naoConfigurada ? `sem chave (tentou ${fmtHora(c.ultima, estado.tz)})` : c?.ultimaOk ? fmtHora(c.ultimaOk, estado.tz) : c ? `falhou ${fmtHora(c.ultima, estado.tz)}` : "nunca";
