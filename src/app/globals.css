@@ -131,9 +131,10 @@ body[data-carregando] main > *:not(.inicial), body[data-carregando] .inicial > :
 .bloco { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; min-width: 0; }
 .bloco-k { font-size: 12px; color: var(--text-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bloco-v { font-size: clamp(1.25rem, 3.2vw, 1.5rem); font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.bloco-s { font-size: 11px; color: var(--text-3); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bloco-s { font-size: 12px; color: var(--text-3); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.bloco-s.pos { color: var(--pos); } .bloco-s.neg { color: var(--neg); }
 .area-lucro { margin: 0; }
-.area-lucro svg { width: 100%; height: 120px; display: block; }
+.area-lucro svg { width: 100%; height: 130px; display: block; touch-action: pan-y; cursor: crosshair; }
 .chips-saldo { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip-saldo { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; background: color-mix(in srgb, var(--neg) 12%, transparent); color: var(--neg); border: 1px solid color-mix(in srgb, var(--neg) 35%, transparent); }
 .ver-detalhes { align-self: flex-start; font-size: 14px; font-weight: 500; color: var(--accent); padding: 8px 0; }

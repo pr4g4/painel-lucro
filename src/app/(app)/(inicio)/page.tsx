@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { formatInTimeZone } from "date-fns-tz";
 import { contextoPeriodo } from "@/lib/contexto";
-import { lucroPorHora, alertaSaldo, resolverAtalho } from "@/lib/calculo";
+import { lucroAcumulado, alertaSaldo, resolverAtalho } from "@/lib/calculo";
 import { carregarCreditos } from "@/coletores/creditos";
 import { avisosAbertos } from "@/lib/dados";
 import { fontesAtrasadas } from "@/lib/hoje";
@@ -10,7 +10,7 @@ import { fmtMoeda, fmtUSD, fmtHorasRestantes } from "@/lib/formato";
 import { SeletorCompacto } from "@/components/seletor-compacto";
 import { NumeroAnimado } from "@/components/numero-animado";
 import { StatusLinha } from "@/components/status-linha";
-import { AreaLucro } from "@/components/area-lucro";
+import { AreaAcumulado } from "@/components/area-acumulado";
 import { Vivo } from "@/components/vivo";
 import { Entretem } from "@/components/entretem";
 import { FaixaAtraso } from "@/components/faixa-atraso";
@@ -35,22 +35,25 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
   const periodoTocaHoje = estado.periodo.fim.getTime() > estado.agora.getTime() - 60 * 60_000;
   const incompleto = periodoTocaHoje && atrasos.some((x) => x.fonte === "meta" || x.fonte === "zenith");
   const varLucro = textoVariacao(t.lucroLiquido, a.lucroLiquido, temBaseAnterior, "moeda", estado.moeda, taxaMxn);
-  const lph = lucroPorHora(ctx.entrada, estado.periodo, estado.tz);
+  const acum = lucroAcumulado(ctx.entrada, estado.periodo, estado.tz);
+  // rótulo do fim: "24h" quando o período fecha à meia-noite (Ontem), senão a hora/dia do fim
+  const fimH = formatInTimeZone(estado.periodo.fim, estado.tz, "HH:mm");
+  const rotuloFim = acum.gran === "hora" ? (fimH === "00:00" ? "24h" : formatInTimeZone(estado.periodo.fim, estado.tz, "HH'h'")) : formatInTimeZone(new Date(estado.periodo.fim.getTime() - 1), estado.tz, "dd/MM");
   const hoje = estado.atalho === "hoje" ? atual : ctx.calc(resolverAtalho("hoje", estado.agora, estado.marcoZero, estado.tz).periodo); // estado de hoje para o "vivo"
-  const serie = "indisponivel" in lph ? [] : lph.pontos.map((p) => p.lucro);
   const ultimaOk = ["meta", "cambio", "openai", "kie"].map((f) => coletas.get(f)?.ultimaOk?.getTime() ?? 0).reduce((m, x) => Math.max(m, x), 0);
   const cambio = coletas.get("cambio");
   const agendadorOk = !!cambio && estado.agora.getTime() - cambio.ultima.getTime() <= 15 * 60_000;
   const chipsSaldo = creditos ? [creditos.kie, creditos.openai].flatMap((s) => { const m = alertaSaldo(s, creditos.limites); return m ? [{ nome: s.fonte === "kie" ? "kie.ai" : "OpenAI", texto: `${fmtUSD(s.saldoUsd)}${s.horasRestantes != null ? ` · ${fmtHorasRestantes(s.horasRestantes)}` : ""}`, motivo: m }] : []; }) : [];
-  const hora = (d: Date) => formatInTimeZone(d, estado.tz, "HH'h'");
   const bloco = (chave: string, rotulo: string, valor: number, ant: number, inverter = false, inteiro = false) => {
     const v = textoVariacao(valor, ant, temBaseAnterior, inteiro ? "int" : "moeda", estado.moeda, taxaMxn);
     const bom = v.bom == null ? null : inverter ? !v.bom : v.bom;
+    const corpo = v.texto.replace(/^[+-]/, "").replace(" vs. anterior", "");
+    const setaTexto = !v.texto ? "" : v.bom == null ? `= ${corpo}` : `${v.texto.startsWith("+") ? "▲" : "▼"} ${corpo}`;
     return (
       <div className="bloco" key={chave}>
         <div className="bloco-k">{rotulo}</div>
         <div className="bloco-v"><NumeroAnimado chave={chave} valor={inteiro ? valor : emMoeda(valor)} texto={inteiro ? String(valor) : money(valor)} casas={inteiro ? 0 : 2} prefixo={inteiro ? "" : prefixo} /></div>
-        <div className={`bloco-s num ${bom == null ? "" : bom ? "pos" : "neg"}`}>{v.texto}</div>
+        <div className={`bloco-s num ${bom == null ? "" : bom ? "pos" : "neg"}`} title={v.texto}>{setaTexto}</div>
       </div>
     );
   };
@@ -85,7 +88,7 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
           {bloco("vendas", "Nº de vendas", t.numVendas, a.numVendas, false, true)}
         </section>
 
-        {"indisponivel" in lph ? <p className="text-xs text-ink-3">{lph.indisponivel}.</p> : <AreaLucro pontos={serie} rotuloInicio={hora(estado.periodo.inicio)} rotuloFim={hora(estado.periodo.fim)} positivo={t.lucroLiquido >= 0} />}
+        <AreaAcumulado pontos={acum.pontos.map((p) => ({ rotulo: p.rotulo, acumulado: emMoeda(p.acumulado), valor: emMoeda(p.valor) }))} rotuloFim={rotuloFim} gran={acum.gran} moeda={estado.moeda} />
 
         {chipsSaldo.length > 0 && (
           <div className="chips-saldo">

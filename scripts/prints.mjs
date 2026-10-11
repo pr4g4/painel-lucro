@@ -21,6 +21,12 @@ for (const [tela, opts] of telas) for (const tema of ["claro", "escuro"]) {
       console.log("altura topo+barra Hoje (desktop):", JSON.stringify(topo));
     }
   }
+  // gráfico acumulado em Ontem e 7 dias (só claro, para a documentação)
+  if (tema === "claro") for (const [nome, rota] of [["inicial-ontem", "/?p=ontem"], ["inicial-7dias", "/?p=7_dias"]]) {
+    await p.goto(`http://localhost:3000${rota}`); await p.waitForSelector(".hero-ini .hero-v"); await p.waitForLoadState("networkidle"); await p.waitForTimeout(400);
+    await p.hover(".area-lucro svg", { position: { x: 200, y: 60 } }).catch(() => {}); await p.waitForTimeout(200);
+    await p.screenshot({ path: `${OUT}/${nome}-${tela}.png`, fullPage: false });
+  }
   // animação de carregamento (> 3 s): atrasa a resposta da troca de período e fotografa o esqueleto/entretenimento
   {
     await p.goto("http://localhost:3000/?p=hoje"); await p.waitForSelector(".hero-ini .hero-v");

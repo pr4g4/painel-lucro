@@ -69,3 +69,17 @@ describe("lucro por hora com vendas marcadas", () => {
     expect(rotuloMetodo("spei")).toBe("SPEI"); expect(rotuloMetodo("bank_transfer")).toBe("SPEI"); expect(rotuloMetodo("OXXO")).toBe("OXXO"); expect(rotuloMetodo(null)).toBe("—");
   });
 });
+
+describe("lucro acumulado para o gráfico da inicial", () => {
+  it("por hora até 48 h, por dia acima; último ponto = lucro líquido do período", async () => {
+    const { lucroAcumulado } = await import("../src/lib/calculo");
+    const e = base([vendaZenith({ brutoMxn: 149, aprovadaEm: brt("2026-10-05T01:20") })], [metaLanc({ instante: brt("2026-10-05T00:00"), valor: 10 })]);
+    const h = lucroAcumulado(e, e.periodo, TZ);
+    expect(h.gran).toBe("hora"); expect(h.pontos).toHaveLength(6); expect(h.pontos[0].rotulo).toBe("00h");
+    expect(h.pontos[5].acumulado).toBeCloseTo(calcularDRE(e).totais.lucroLiquido, 6);
+    const semana = { inicio: brt("2026-10-04T00:00"), fim: brt("2026-10-11T00:00") };
+    const d = lucroAcumulado(e, semana, TZ);
+    expect(d.gran).toBe("dia"); expect(d.pontos.map((p) => p.rotulo)).toEqual(["04/10", "05/10", "06/10", "07/10", "08/10", "09/10", "10/10"]);
+    expect(d.pontos[6].acumulado).toBeCloseTo(calcularDRE({ ...e, periodo: semana }).totais.lucroLiquido, 6);
+  });
+});

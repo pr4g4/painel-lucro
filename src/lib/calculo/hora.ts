@@ -39,3 +39,24 @@ export function lucroPorHora(entrada: Entrada, periodo: Periodo, tz: string): { 
     .sort((a, b) => a.instante.getTime() - b.instante.getTime());
   return { pontos, vendas };
 }
+
+export type PontoAcumulado = { inicio: Date; rotulo: string; valor: number; acumulado: number };
+
+/**
+ * Lucro líquido ACUMULADO no período, por hora (períodos de até 48 h) ou por dia (acima disso).
+ * Mesmo rateio do imposto de `lucroPorHora`: o último ponto é exatamente o lucro líquido do período.
+ */
+export function lucroAcumulado(entrada: Entrada, periodo: Periodo, tz: string): { gran: "hora" | "dia"; pontos: PontoAcumulado[] } {
+  const horas = (periodo.fim.getTime() - periodo.inicio.getTime()) / 3_600_000;
+  const gran: "hora" | "dia" = horas <= 48 ? "hora" : "dia";
+  const total = calcularDRE({ ...entrada, periodo });
+  const fator = total.totais.lucroBruto > 0 ? total.totais.lucroLiquido / total.totais.lucroBruto : 1;
+  let acumulado = 0;
+  const pontos = fatiar(periodo, gran, tz).map((fatia) => {
+    const dre = calcularDRE({ ...entrada, periodo: fatia });
+    const valor = dre.totais.lucroBruto * fator;
+    acumulado += valor;
+    return { inicio: fatia.inicio, rotulo: formatInTimeZone(fatia.inicio, tz, gran === "hora" ? "HH'h'" : "dd/MM"), valor, acumulado };
+  });
+  return { gran, pontos };
+}
