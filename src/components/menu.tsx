@@ -6,7 +6,7 @@ import { BotaoTema } from "./tema";
 
 export type Grupo = { rotulo: string; icone: string; itens: [string, string][] };
 export const GRUPOS: Grupo[] = [
-  { rotulo: "Visão geral", icone: "◎", itens: [["/", "Painel"], ["/resumo", "Resumo (simples)"]] },
+  { rotulo: "Visão geral", icone: "◎", itens: [["/", "Início"], ["/detalhes", "Detalhes"], ["/resumo", "Resumo (simples)"]] },
   { rotulo: "Resultados", icone: "▤", itens: [["/dre", "DRE"], ["/custos", "Custos por tipo"], ["/produtos", "Por produto"]] },
   { rotulo: "Campanhas", icone: "◍", itens: [["/campanhas", "Campanhas"]] },
   { rotulo: "Dados", icone: "⊞", itens: [["/lancamentos", "Lançamentos"], ["/manuais", "Lançamentos manuais"], ["/venda-manual", "Venda manual"], ["/importar", "Importar CSV"]] },
@@ -52,7 +52,8 @@ export function Menu({ nome, papel, avisos, sair }: { nome: string; papel: strin
 
       {/* celular: barra inferior com 4 ícones; grupos abrem uma folha */}
       <nav className="barra-inferior md:hidden" aria-label="Principal (celular)">
-        {GRUPOS.slice(0, 3).map((g) => (
+        <Link href="/" prefetch={false} className={`bi-item ${pathname === "/" ? "nav-ativo" : ""}`}><span className="bi-icone">◎</span><span>Início</span></Link>
+        {GRUPOS.slice(1, 3).map((g) => (
           g.itens.length === 1 ? (
             <Link key={g.rotulo} href={g.itens[0][0]} prefetch={false} className={`bi-item ${ativo(g) ? "nav-ativo" : ""}`}><span className="bi-icone">{g.icone}</span><span>{g.rotulo}</span></Link>
           ) : (
@@ -72,6 +73,8 @@ export function Menu({ nome, papel, avisos, sair }: { nome: string; papel: strin
             <div className="flex flex-col gap-1">
               {aberto === "mais" ? (
                 <>
+                  {GRUPOS[0].itens.slice(1).map(item)}
+                  <div className="h-px bg-border my-1" />
                   {GRUPOS[3].itens.map(item)}
                   <div className="h-px bg-border my-1" />
                   {item(AVISOS)}{item(PARAMETROS)}

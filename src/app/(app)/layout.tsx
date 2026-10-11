@@ -3,6 +3,7 @@ import { avisosAbertos } from "@/lib/dados";
 import { sair } from "@/app/login/acoes";
 import { Menu } from "@/components/menu";
 import { BarraHoje } from "@/components/barra-hoje";
+import { SoForaDaInicial } from "@/components/so-fora-da-inicial";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen flex flex-col">
       <Menu nome={s.nome ?? ""} papel={s.papel ?? "ve"} avisos={avisos.length} sair={sair} />
-      <BarraHoje webhookZenithRejeitado={avisos.some((a) => a.tipo === "webhook_rejeitado")} />
+      <SoForaDaInicial><BarraHoje webhookZenithRejeitado={avisos.some((a) => a.tipo === "webhook_rejeitado")} /></SoForaDaInicial>
       <main className="max-w-6xl w-full mx-auto px-4 py-4 md:py-6 flex flex-col gap-4 flex-1 pb-24 md:pb-6">{children}</main>
     </div>
   );

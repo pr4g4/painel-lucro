@@ -106,7 +106,52 @@ h1 { font-size: 1.25rem; letter-spacing: -0.01em; }
 .chip:disabled { cursor: progress; }
 .girando { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 2px solid var(--text-3); border-top-color: var(--accent); border-radius: 50%; animation: girar .8s linear infinite; }
 @keyframes girar { to { transform: rotate(360deg); } }
-body[data-carregando] main { opacity: .55; transition: opacity .2s; pointer-events: none; }
+body[data-carregando] main { pointer-events: none; }
+body[data-carregando] main > *:not(.inicial), body[data-carregando] .inicial > :not(.entra), body[data-carregando] .entra > :not(.hero-ini), body[data-carregando] .hero-ini > :not(.entretem-cobre) { opacity: .55; transition: opacity .2s; }
+
+/* ---------- página inicial (essencial) ---------- */
+.inicial { display: flex; flex-direction: column; gap: 20px; }
+.chips-linha { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+.chips-linha::-webkit-scrollbar { display: none; }
+.chip-sm { padding: 6px 12px; font-size: 13px; min-height: 36px; }
+.popover-esq { left: 0; right: auto; }
+.hero-ini { padding: 4px 0 0; position: relative; }
+.entretem-cobre { position: absolute; inset: 0; background: var(--bg); z-index: 2; display: flex; align-items: center; }
+.entretem-cobre { pointer-events: auto; }
+.hero-ini .hero-v { font-size: clamp(2.75rem, 9vw, 3.75rem); font-weight: 700; letter-spacing: -0.035em; line-height: 1; margin-top: 6px; font-variant-numeric: tabular-nums; transition: color .3s; }
+.hero-ini .hero-sub { font-size: 13px; color: var(--text-3); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.status-linha { display: flex; align-items: center; gap: 8px; font-size: 12px; min-height: 28px; }
+.pulso { width: 8px; height: 8px; border-radius: 50%; display: inline-block; animation: pulsar 2.2s ease-in-out infinite; }
+@keyframes pulsar { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 0%, transparent); opacity: 1; } 50% { opacity: .55; transform: scale(.85); } }
+.btn-icone { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); cursor: pointer; }
+.btn-icone:disabled { cursor: progress; }
+.gira { animation: girar .9s linear infinite; }
+.blocos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (min-width: 768px) { .blocos { grid-template-columns: repeat(4, 1fr); gap: 16px; } }
+.bloco { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; min-width: 0; }
+.bloco-k { font-size: 12px; color: var(--text-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bloco-v { font-size: clamp(1.25rem, 3.2vw, 1.5rem); font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bloco-s { font-size: 11px; color: var(--text-3); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.area-lucro { margin: 0; }
+.area-lucro svg { width: 100%; height: 120px; display: block; }
+.chips-saldo { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-saldo { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; background: color-mix(in srgb, var(--neg) 12%, transparent); color: var(--neg); border: 1px solid color-mix(in srgb, var(--neg) 35%, transparent); }
+.ver-detalhes { align-self: flex-start; font-size: 14px; font-weight: 500; color: var(--accent); padding: 8px 0; }
+@media (hover: hover) { .ver-detalhes:hover { text-decoration: underline; } }
+.entra { display: flex; flex-direction: column; gap: 20px; animation: entrar .25s ease-out; }
+@keyframes entrar { from { opacity: .35; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.brilho-verde { animation: brilhar 1.3s ease-out; }
+@keyframes brilhar { 0% { text-shadow: 0 0 0 transparent; } 25% { text-shadow: 0 0 18px color-mix(in srgb, var(--pos) 70%, transparent); } 100% { text-shadow: 0 0 0 transparent; } }
+.toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 70; background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 600; box-shadow: 0 10px 30px -10px rgba(0,0,0,.5); animation: entrar .25s ease-out; }
+@media (min-width: 768px) { .toast { bottom: 24px; } }
+.confete { position: fixed; inset: 0; pointer-events: none; z-index: 65; overflow: hidden; }
+.confete i { position: absolute; top: -12px; width: 8px; height: 12px; border-radius: 2px; animation: cair 2.4s ease-in forwards; }
+@keyframes cair { 0% { transform: translateY(0) rotate(0); opacity: 1; } 100% { transform: translateY(100vh) rotate(540deg); opacity: 0; } }
+/* carregando > 3 s: barras montando em loop */
+.entretem { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-height: 96px; }
+.barra-anim { fill: var(--accent); opacity: .85; transform-origin: bottom; transform-box: fill-box; animation: montar 1.6s ease-in-out infinite; }
+@keyframes montar { 0% { transform: scaleY(.1); opacity: .3; } 50% { transform: scaleY(1); opacity: .9; } 100% { transform: scaleY(.1); opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .entra, .toast { animation: none; } .pulso { animation: none; } .barra-anim { animation: none; transform: none; } }
 
 /* ---------- seletor de período: fichas + Opções ---------- */
 .seletor { position: relative; }

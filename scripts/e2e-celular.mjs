@@ -20,7 +20,8 @@ const viaFolha = async (grupo, rotulo, rota) => {
   chk(`menu ${grupo} → ${rotulo}`, new URL(p.url()).pathname === rota, p.url());
   chk("folha fechou", (await p.locator(".folha").count()) === 0);
 };
-await viaFolha("Visão geral", "Resumo (simples)", "/resumo");
+await viaFolha("Mais", "Resumo (simples)", "/resumo");
+await viaFolha("Mais", "Detalhes", "/detalhes");
 await viaFolha("Resultados", "DRE", "/dre");
 await viaFolha("Resultados", "Custos por tipo", "/custos");
 await viaFolha("Resultados", "Por produto", "/produtos");
@@ -31,18 +32,22 @@ await viaFolha("Mais", "Venda manual", "/venda-manual");
 await viaFolha("Mais", "Importar CSV", "/importar");
 await viaFolha("Mais", "Avisos", "/avisos");
 await viaFolha("Mais", "Parâmetros", "/parametros");
-await viaFolha("Visão geral", "Painel", "/");
-// barra "Hoje": itens clicáveis
+await p.locator('.barra-inferior a:has-text("Início")').tap(); await p.waitForTimeout(900); chk("menu Início", new URL(p.url()).pathname === "/", p.url());
+// barra "Hoje": itens clicáveis (fora da inicial)
+await p.goto("http://localhost:3000/detalhes"); await p.waitForLoadState("networkidle");
 await p.locator(".barra-hoje a").nth(1).tap(); await p.waitForTimeout(900); chk("barra Hoje → DRE", p.url().includes("/dre"), p.url());
+chk("barra Hoje não aparece na inicial", await (async () => { await p.goto("http://localhost:3000/"); await p.waitForLoadState("networkidle"); return (await p.locator(".barra-hoje").count()) === 0; })());
 // atalhos de período: tocar em cada chip
 await p.goto("http://localhost:3000/"); await p.waitForLoadState("networkidle");
-for (const [rotulo, q] of [["Hoje", "p=hoje"], ["Últimas 6 h", "p=ultimas_6h"], ["Últimas 24 h", "p=ultimas_24h"], ["Ontem", "p=ontem"], ["7 dias", "p=7_dias"], ["Mês atual", "p=mes_atual"], ["Tudo (com histórico)", "p=tudo"], ["Desde o marco zero", "p=marco_zero"]]) {
+for (const [rotulo, q, noMais] of [["Hoje", "p=hoje", false], ["Ontem", "p=ontem", false], ["7 dias", "p=7_dias", false], ["Últimas 6 h", "p=ultimas_6h", true], ["Últimas 24 h", "p=ultimas_24h", true], ["Mês atual", "p=mes_atual", true], ["Tudo (com histórico)", "p=tudo", true], ["Desde o marco zero", "p=marco_zero", true]]) {
+  if (noMais) { await p.locator(".seletor-compacto .chips-linha button.chip").last().tap(); await p.waitForSelector(".popover", { timeout: 3000 }); }
   const el = p.locator(`button.chip:text-is("${rotulo}")`).first();
   await el.scrollIntoViewIfNeeded(); await el.tap(); await p.waitForTimeout(1200);
   chk(`chip ${rotulo}`, p.url().includes(q), p.url());
 }
-// personalizado
-await p.locator("button.chip:text-is('Personalizado')").tap(); await p.fill("input[type=datetime-local] >> nth=0", "2026-10-03T00:00"); await p.fill("input[type=datetime-local] >> nth=1", "2026-10-03T06:00"); await p.tap("button:has-text('Aplicar')"); await p.waitForTimeout(1200);
+chk("sem rolagem horizontal na inicial", !(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)));
+// personalizado (dentro de Mais)
+await p.locator(".seletor-compacto .chips-linha button.chip").last().tap(); await p.waitForSelector(".popover"); await p.fill("input[type=datetime-local] >> nth=0", "2026-10-03T00:00"); await p.fill("input[type=datetime-local] >> nth=1", "2026-10-03T06:00"); await p.tap("button:has-text('Aplicar')"); await p.waitForTimeout(1200);
 chk("personalizado", p.url().includes("de=2026-10-03T00%3A00") || p.url().includes("de=2026-10-03T00:00"), p.url());
 // tema, atualizar, sair
 const t0 = await p.evaluate(() => document.documentElement.dataset.theme);
@@ -53,7 +58,7 @@ chk("sair", p.url().includes("/login"), p.url());
 // cobertura em todas as páginas (nada por cima de botão visível)
 await p.waitForLoadState("networkidle"); await p.waitForTimeout(800);
 await p.fill('input[name=usuario]', "erick"); await p.fill('input[name=senha]', "erick123"); await p.tap("button:has-text('Entrar')"); await p.waitForURL("http://localhost:3000/");
-for (const rota of ["/", "/resumo", "/dre", "/campanhas", "/manuais", "/venda-manual", "/custos", "/lancamentos", "/produtos", "/avisos", "/parametros"]) {
+for (const rota of ["/", "/detalhes", "/resumo", "/dre", "/campanhas", "/manuais", "/venda-manual", "/custos", "/lancamentos", "/produtos", "/avisos", "/parametros"]) {
   await p.goto(`http://localhost:3000${rota}`); await p.waitForLoadState("networkidle");
   const r = await p.evaluate(() => {
     const out = [];

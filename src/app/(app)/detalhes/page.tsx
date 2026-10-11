@@ -29,7 +29,7 @@ import type { Params } from "@/lib/periodo-url";
 
 export const dynamic = "force-dynamic";
 
-export default async function Painel({ searchParams }: { searchParams: Promise<Params> }) {
+export default async function Detalhes({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = await searchParams;
   const ctx = await contextoPeriodo(sp);
   const { estado, atual, anterior, temBaseAnterior, coletas, taxaMxn } = ctx;
@@ -87,6 +87,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<P
   return (
     <>
       <Suspense fallback={<div className="h-12 skeleton" />}><SeletorPeriodo {...ctx.propsSeletor} semRotulo /></Suspense>
+      <p className="text-xs text-ink-3">Detalhes do período · a <a className="underline" href={`/?${query}`}>página inicial</a> mostra só o essencial.</p>
       <VisoesSalvas />
       {ctx.problemas.length > 0 && <div className="text-xs text-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
       {periodoTocaHoje && <FaixaAtraso atrasos={atrasos} tz={estado.tz} />}

@@ -74,6 +74,10 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
   7. Se algum evento do webhook falhar por falta de câmbio (fim de semana sem PTAX), ele é reprocessado sozinho na próxima coleta de câmbio (a cada 10 min). Para forçar agora e ver os números, abra logado: `https://SEU-SITE.vercel.app/api/zenith/reprocessar?cambio=1` (mostra quantas taxas PTAX há por moeda, a data da última e o que foi reprocessado).
   Regra: a mesma venda pode chegar como `deposit.credited` e também `payment.captured`/`checkout.succeeded`; o app conta a receita **uma vez por `referenceId`** (sem referenceId, por `data.id`). Reembolso entra como linha negativa na data do reembolso. Reserva retida = 10% do bruto (parâmetro).
 
+## Página inicial (/) e Detalhes
+- A inicial mostra só o essencial: período (Hoje · Ontem · 7 dias, resto em "Mais"), lucro líquido grande, metade p/ sócio e comparação, linha de status com botão de atualizar, 4 blocos (receita, Meta, IA, vendas), gráfico de lucro por hora e, só quando houver, chips de saldo baixo das IAs. "Ver detalhes" leva a /detalhes, que tem tudo o que saiu da inicial (indicadores, custos, vendas, gráficos, projeção, créditos, fontes). Nenhum número muda entre as duas.
+- Ao trocar período os números contam até o valor novo; passou de 3 s aparece a animação de barras com frases; passou de 12 s, "Tentar de novo". Venda nova com a página aberta mostra "+1 venda · MX$ …"; lucro do dia virando positivo solta um confete (1× por dia). Com "reduzir movimento" no aparelho, nada disso anima.
+
 ## Como o painel é organizado (depois do visual novo)
 - **Barra "Hoje"** fixa no topo de todas as telas: lucro, receita, Meta, IA e saldos das IAs de hoje. Cada item leva para a tela certa.
 - **Painel**: o número grande é o lucro líquido do período escolhido; abaixo, 4 números-chave; depois, seções que abrem com um toque (ficam fechadas até você abrir; o navegador lembra).
