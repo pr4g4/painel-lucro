@@ -69,3 +69,29 @@ describe.skipIf(!process.env.DATABASE_URL)("coleta TikTok (banco local)", () => 
     await db.execute(sql`delete from lancamentos where fonte = 'tiktok'`); await db.execute(sql`delete from campanhas where conta_id like 'tiktok:%'`);
   });
 });
+
+describe.skipIf(!process.env.DATABASE_URL)("TikTok: API substitui CSV no mesmo dia e CSV não duplica o que veio da API", () => {
+  it("CSV → API (mesma campanha, mesmo dia) remove o CSV; CSV de novo é ignorado; outro dia fica", async () => {
+    const { db } = await import("../src/db");
+    const { coletarTikTok, importarCsvTikTok, lerCsvTikTok } = await import("../src/coletores/tiktok");
+    await db.execute(sql`delete from lancamentos where fonte = 'tiktok'`); await db.execute(sql`delete from campanhas where conta_id like 'tiktok:%'`);
+    await db.execute(sql`insert into cambio (dia, par, taxa, fonte) values ('2026-10-04', 'USDBRL', '5.40', 'ptax') on conflict (dia, par) do update set taxa = '5.40'`);
+    const csv = "Nome da campanha,Data,Custo\nVAV - SITE - 3 LPs - 45+ - TIKTOK,2026-10-05,\"58,20\"\nVAV - SITE - 3 LPs - 45+ - TIKTOK,2026-10-04,\"10,00\"\n";
+    const imp = await importarCsvTikTok(lerCsvTikTok(csv), "BRL");
+    expect(imp.ok).toBe(true); expect(imp.registros).toBe(2);
+    const fake: TikTokCliente = {
+      async conta() { return { id: "7685204406018605072", nome: "Conta TT", moeda: "BRL", fuso: "America/Sao_Paulo" }; },
+      async relatorio() { return { linhas: [{ campaign_id: "tt9", campaign_name: "VAV - SITE - 3 LPs - 45+ - TIKTOK", spend: 30, stat_time: "2026-10-05 10:00:00" }, { campaign_id: "tt9", campaign_name: "VAV - SITE - 3 LPs - 45+ - TIKTOK", spend: 28.2, stat_time: "2026-10-05 15:00:00" }], granularidade: "hora" }; },
+      async campanhas() { return [{ id: "tt9", name: "VAV - SITE - 3 LPs - 45+ - TIKTOK", status: "ACTIVE" }]; },
+    };
+    const r = await coletarTikTok(fake, ["7685204406018605072"], brt("2026-10-05T16:00"), 24);
+    expect(r.ok).toBe(true); expect((r.detalhe as Record<string, { csvSubstituidas?: number }>)["7685204406018605072"].csvSubstituidas).toBe(1);
+    const soma = async (dia: string) => Number((await db.execute(sql`select coalesce(sum(valor_brl), 0)::float as s from lancamentos where fonte = 'tiktok' and instante >= ${`${dia}T03:00:00Z`}::timestamptz and instante < (${`${dia}T03:00:00Z`}::timestamptz + interval '1 day')`) as unknown as { s: number }[])[0].s);
+    expect(await soma("2026-10-05")).toBeCloseTo(58.2); // só a API (30 + 28,20), sem o CSV de 58,20 somado
+    expect(await soma("2026-10-04")).toBeCloseTo(10); // dia que a API não trouxe continua com o CSV
+    const imp2 = await importarCsvTikTok(lerCsvTikTok(csv), "BRL");
+    expect(imp2.ok).toBe(true); expect((imp2.detalhe as { ignoradasJaNaApi?: number }).ignoradasJaNaApi).toBe(1);
+    expect(await soma("2026-10-05")).toBeCloseTo(58.2);
+    await db.execute(sql`delete from lancamentos where fonte = 'tiktok'`); await db.execute(sql`delete from campanhas where conta_id like 'tiktok:%'`);
+  });
+});

@@ -5,7 +5,7 @@
  * - Chave natural `tiktok|advertiser|campanha|instante`. Imposto pelo parâmetro imposto_tiktok_pct (padrão 0).
  * Alternativa sem API: CSV exportado do Ads Manager (lerCsvTikTok + importarCsvTikTok).
  */
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { fromZonedTime } from "date-fns-tz";
 import { db, schema } from "@/db";
 import { executarColeta, upsertLancamentos, marcoZeroAtual, taxaDoDia, diaBrasilia, abrirAviso, resolverAvisos, type NovoLancamento } from "./base";
@@ -79,6 +79,45 @@ export async function paraBrl(valor: number, moeda: string, quando: Date): Promi
 }
 
 const TZ_APP = process.env.APP_TZ ?? "America/Sao_Paulo";
+const CONTA_CSV = "tiktok:csv";
+const normNome = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+/** Limites [início, fim) do dia de Brasília que contém o instante. */
+function diaBrasiliaLimites(d: Date): { dia: string; ini: Date; fim: Date } {
+  const dia = diaBrasilia(d); const ini = fromZonedTime(`${dia}T00:00:00`, TZ_APP);
+  return { dia, ini, fim: new Date(ini.getTime() + 86_400_000) };
+}
+
+/**
+ * A API manda: quando ela traz uma campanha num dia, o que veio por CSV para a MESMA campanha (nome ou id) no MESMO dia é removido,
+ * para não somar os dois. Devolve quantas linhas de CSV saíram.
+ */
+export async function removerCsvCobertoPelaApi(rows: { instante: Date; descricao: string; campanhaId: string | null }[]): Promise<number> {
+  const porDia = new Map<string, { ini: Date; fim: Date; nomes: Set<string>; ids: Set<string> }>();
+  for (const r of rows) {
+    const { dia, ini, fim } = diaBrasiliaLimites(r.instante);
+    const g = porDia.get(dia) ?? { ini, fim, nomes: new Set<string>(), ids: new Set<string>() };
+    g.nomes.add(normNome(r.descricao)); if (r.campanhaId) g.ids.add(r.campanhaId); porDia.set(dia, g);
+  }
+  let removidas = 0;
+  for (const g of porDia.values()) {
+    const csv = await db.select({ id: schema.lancamentos.id, descricao: schema.lancamentos.descricao, campanhaId: schema.lancamentos.campanhaId }).from(schema.lancamentos)
+      .where(and(eq(schema.lancamentos.fonte, "tiktok"), eq(schema.lancamentos.contaId, CONTA_CSV), gte(schema.lancamentos.instante, g.ini), lt(schema.lancamentos.instante, g.fim)));
+    const alvo = csv.filter((c) => g.nomes.has(normNome(c.descricao)) || (c.campanhaId != null && g.ids.has(c.campanhaId))).map((c) => c.id);
+    if (alvo.length) { await db.delete(schema.lancamentos).where(inArray(schema.lancamentos.id, alvo)); removidas += alvo.length; }
+  }
+  return removidas;
+}
+
+/** Dias/campanhas que a API já cobriu: um CSV importado depois não pode duplicar. */
+async function coberturaDaApi(dias: Map<string, { ini: Date; fim: Date }>): Promise<Map<string, { nomes: Set<string>; ids: Set<string> }>> {
+  const out = new Map<string, { nomes: Set<string>; ids: Set<string> }>();
+  for (const [dia, { ini, fim }] of dias) {
+    const api = await db.select({ descricao: schema.lancamentos.descricao, campanhaId: schema.lancamentos.campanhaId }).from(schema.lancamentos)
+      .where(and(eq(schema.lancamentos.fonte, "tiktok"), sql`${schema.lancamentos.contaId} <> ${CONTA_CSV}`, gte(schema.lancamentos.instante, ini), lt(schema.lancamentos.instante, fim)));
+    out.set(dia, { nomes: new Set(api.map((a) => normNome(a.descricao))), ids: new Set(api.map((a) => a.campanhaId).filter((x): x is string => !!x)) });
+  }
+  return out;
+}
 const diaNoFuso = (d: Date, tz: string) => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 
 export async function coletarTikTok(cliente: TikTokCliente, contas: string[], agora = new Date(), horasRetro?: number) {
@@ -115,7 +154,8 @@ export async function coletarTikTok(cliente: TikTokCliente, contas: string[], ag
           });
         }
         total += await upsertLancamentos(rows);
-        detalhe[id] = { nome: conta.nome, moeda: conta.moeda, fuso: conta.fuso, linhas: linhas.length, granularidade };
+        const csvRemovidas = await removerCsvCobertoPelaApi(rows.map((r) => ({ instante: r.instante as Date, descricao: r.descricao, campanhaId: r.campanhaId ?? null })));
+        detalhe[id] = { nome: conta.nome, moeda: conta.moeda, fuso: conta.fuso, linhas: linhas.length, granularidade, ...(csvRemovidas ? { csvSubstituidas: csvRemovidas } : {}) };
       } catch (e) { const msg = e instanceof Error ? e.message : String(e); erros.push(`${id}: ${msg}`); detalhe[id] = { erro: msg }; }
     }
     if (semCambio) await abrirAviso("sem_cambio", "tiktok", "Sem taxa de câmbio para converter o gasto do TikTok; rode a coleta de câmbio.");
@@ -173,12 +213,17 @@ export async function importarCsvTikTok(linhas: LinhaCsvTikTok[], moeda: string,
   return executarColeta("tiktok", async () => {
     const marco = await marcoZeroAtual();
     const frentes = await db.select({ id: schema.frentes.id, regraCampanha: schema.frentes.regraCampanha }).from(schema.frentes).orderBy(schema.frentes.ordem);
-    const rows: NovoLancamento[] = []; let semCambio = 0;
+    const rows: NovoLancamento[] = []; let semCambio = 0; let jaNaApi = 0;
+    const dias = new Map<string, { ini: Date; fim: Date }>();
+    for (const l of linhas) { const { dia, ini, fim } = diaBrasiliaLimites(l.quando); dias.set(dia, { ini, fim }); }
+    const cobertura = await coberturaDaApi(dias);
     for (const l of linhas) {
+      const cob = cobertura.get(diaBrasilia(l.quando));
+      if (cob && (cob.nomes.has(normNome(l.campanha)) || (l.campanhaId != null && cob.ids.has(l.campanhaId)))) { jaNaApi++; continue; } // a API já cobre: não duplica
       const conv = await paraBrl(l.custo, moeda, l.quando);
       if (!conv) { semCambio++; continue; }
       const campanhaId = l.campanhaId ?? l.campanha;
-      await db.insert(schema.campanhas).values({ contaId: `tiktok:${contaRotulo}`, campanhaId, nome: l.campanha, status: null, numeroWhatsapp: extrairNumeroWhatsapp(l.campanha), frenteId: await resolverFrente(l.campanha, frentes), atualizadoEm: new Date() })
+      await db.insert(schema.campanhas).values({ contaId: contaRotulo === "csv" ? CONTA_CSV : `tiktok:${contaRotulo}`, campanhaId, nome: l.campanha, status: null, numeroWhatsapp: extrairNumeroWhatsapp(l.campanha), frenteId: await resolverFrente(l.campanha, frentes), atualizadoEm: new Date() })
         .onConflictDoUpdate({ target: [schema.campanhas.contaId, schema.campanhas.campanhaId], set: { nome: l.campanha, atualizadoEm: new Date() } });
       rows.push({
         fonte: "tiktok", tipo: "gasto_anuncio", chaveNatural: `tiktok|${contaRotulo}|${campanhaId}|${l.quando.toISOString()}`, instante: l.quando, granularidade: l.granularidade,
@@ -187,6 +232,6 @@ export async function importarCsvTikTok(linhas: LinhaCsvTikTok[], moeda: string,
       });
     }
     if (semCambio) throw new Error(`${semCambio} linha(s) sem taxa de câmbio ${moeda}→BRL para a data; rode a coleta de câmbio e importe de novo`);
-    return { registros: await upsertLancamentos(rows), detalhe: { origem: "csv", moeda, linhas: linhas.length } };
+    return { registros: await upsertLancamentos(rows), detalhe: { origem: "csv", moeda, linhas: linhas.length, ...(jaNaApi ? { ignoradasJaNaApi: jaNaApi } : {}) } };
   });
 }

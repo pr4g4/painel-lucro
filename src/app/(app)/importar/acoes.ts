@@ -45,5 +45,6 @@ export async function importarCsvTikTokAcao(_prev: { ok?: boolean; mensagem?: st
   revalidatePath("/"); invalidarDados(); revalidatePath("/dre"); revalidatePath("/campanhas"); revalidatePath("/lancamentos");
   const total = linhas.reduce((s, l) => s + l.custo, 0);
   const dias = new Set(linhas.map((l) => l.quando.toISOString().slice(0, 10)));
-  return r.ok ? { ok: true, mensagem: `${r.registros} linha(s) do TikTok gravadas: ${linhas.length} registro(s), ${dias.size} dia(s), total ${moeda} ${total.toFixed(2)} (${linhas[0].granularidade === "hora" ? "por hora" : "por dia"}). Importar de novo não duplica.` } : { ok: false, mensagem: `Falhou: ${r.erro}` };
+  const ign = Number((r.detalhe as { ignoradasJaNaApi?: number } | undefined)?.ignoradasJaNaApi ?? 0);
+  return r.ok ? { ok: true, mensagem: `${r.registros} linha(s) do TikTok gravadas de ${linhas.length} (${dias.size} dia(s), total ${moeda} ${total.toFixed(2)}, ${linhas[0].granularidade === "hora" ? "por hora" : "por dia"}).${ign ? ` ${ign} linha(s) ignorada(s): a API já trouxe essa campanha nesse dia.` : ""} Importar de novo não duplica.` } : { ok: false, mensagem: `Falhou: ${r.erro}` };
 }

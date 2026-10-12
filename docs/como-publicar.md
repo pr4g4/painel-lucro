@@ -104,4 +104,6 @@ Dois jeitos de o gasto do TikTok entrar no painel. Nenhum muda a Meta.
 
 **B) Sem API (manual)** — Ads Manager → Relatórios → exportar por campanha com as colunas Nome da campanha, Data (por dia ou por hora) e Custo → em **/importar**, bloco "TikTok Ads (CSV)", escolha a moeda da conta e suba o arquivo. Importar de novo não duplica.
 
+Conta atual: Advertiser ID `7685204406018605072` (moeda BRL, fuso de Brasília). Se o mesmo dia tiver sido importado por CSV antes de a API ligar, a API substitui o CSV daquela campanha naquele dia (não soma); um CSV importado depois é ignorado para os dias/campanhas que a API já cobriu.
+
 Na DRE o TikTok tem linhas próprias ("TikTok exibido" e "Imposto TikTok"); o imposto é o parâmetro **imposto_tiktok_pct** (padrão 0 — ajuste em /parametros se a fatura do TikTok tiver imposto como a da Meta). ROAS, custo por venda e "Anúncios" somam Meta + TikTok. As campanhas do TikTok entram em /campanhas e seguem a mesma regra de frente e de número de WhatsApp pelo nome.
