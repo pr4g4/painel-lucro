@@ -15,7 +15,10 @@ import { carregarCreditos } from "@/coletores/creditos";
 import { semaforoSaldo, coletaFalhando, fontesAtrasadas } from "@/lib/hoje";
 import { FaixaAtraso } from "@/components/faixa-atraso";
 import { avisosAbertos } from "@/lib/dados";
-import { faltaParaEmpatar, gastoPorNumero, iaPorVenda, iaPorHora, compararAntesDepois, lucroPorHora } from "@/lib/calculo";
+import { faltaParaEmpatar, gastoPorNumero, iaPorVenda, iaPorHora, compararAntesDepois, lucroPorHora, cardsProfitfy, porFormaPagamento, metasDoMes, aportesNoPeriodo, numeroVigente } from "@/lib/calculo";
+import { pctFazSentido, fmtPct } from "@/lib/formato";
+import { toZonedTime } from "date-fns-tz";
+import { getDaysInMonth } from "date-fns";
 import { montarEntradaAmpla } from "@/lib/dados";
 import { GraficoLucroHora } from "@/components/grafico-lucro-hora";
 import { GraficoIAHora } from "@/components/grafico-ia-hora";
@@ -81,6 +84,13 @@ export default async function Detalhes({ searchParams }: { searchParams: Promise
   const cmp = ultimaMarc ? compararAntesDepois(pontosIA, ultimaMarc.quando) : null;
   // D) lucro por hora com vendas marcadas
   const lph = lucroPorHora(ctx.entrada, estado.periodo, estado.tz);
+  // estilo Profitfy: cinco cards com variação %, forma de pagamento, metas do mês e aportes (nada disso altera a DRE)
+  const cards = cardsProfitfy(atual, temBaseAnterior ? anterior : null);
+  const formas = porFormaPagamento(ctx.entrada.vendas, estado.periodo, estado.incluirHistorico);
+  const diasNoMes = getDaysInMonth(toZonedTime(estado.agora, estado.tz));
+  const diasRestantes = Math.max(0, diasNoMes - (toZonedTime(estado.agora, estado.tz).getDate() - 1) - (toZonedTime(estado.agora, estado.tz).getHours() / 24));
+  const metas = metasDoMes(mes, numeroVigente(ctx.params, "meta_receita_mes", estado.agora, 0), numeroVigente(ctx.params, "meta_lucro_mes", estado.agora, 0), diasRestantes);
+  const aportes = aportesNoPeriodo(ctx.entrada.manuais, estado.periodo, ctx.entrada.opcoes.cambio);
   const graficosAbertos = estado.atalho === "hoje" || estado.atalho === "ultimas_24h";
   const cCambio = coletas.get("cambio"); const agendadorHa = cCambio ? Math.round((estado.agora.getTime() - cCambio.ultima.getTime()) / 60_000) : null;
 
@@ -108,6 +118,22 @@ export default async function Detalhes({ searchParams }: { searchParams: Promise
         </div>
       </section>
 
+      {/* cards no estilo Profitfy: lucro, receita, custo dos produtos (IA), marketing, taxas e impostos */}
+      <section className="cards-pf" aria-label="Resumo financeiro">
+        {cards.map((c) => {
+          const v = textoVariacao(c.valor, c.anterior, temBaseAnterior && c.anterior != null, "moeda", estado.moeda, taxaMxn);
+          const bom = v.bom == null ? null : c.inverter ? !v.bom : v.bom;
+          const pct = c.anterior != null && temBaseAnterior && pctFazSentido(c.valor, c.anterior) ? fmtPct((c.valor - c.anterior) / Math.abs(c.anterior)) : null;
+          return (
+            <div key={c.chave} className={`card-pf ${c.chave === "lucro" ? "card-pf-destaque" : ""}`} title={c.nota}>
+              <div className="bloco-k">{c.rotulo}</div>
+              <div className={`bloco-v num ${c.chave === "lucro" ? (c.valor < 0 ? "neg" : c.valor > 0 ? "pos" : "") : ""}`}>{money(c.valor)}</div>
+              <div className={`bloco-s num ${bom == null ? "" : bom ? "pos" : "neg"}`}>{pct ? `${pct} vs. anterior` : v.texto || c.nota}</div>
+            </div>
+          );
+        })}
+      </section>
+
       {/* quatro números secundários, sem caixas */}
       <section className="secundarios" aria-label="Números do período">
         <Metrica rotulo="Receita líquida" valor={t.receitaLiquida} anterior={a.receitaLiquida} {...base} />
@@ -121,7 +147,8 @@ export default async function Detalhes({ searchParams }: { searchParams: Promise
           {Math.abs(t.lucroBruto - t.lucroLiquido) >= 0.005 && <Metrica rotulo="Lucro bruto" valor={t.lucroBruto} anterior={a.lucroBruto} colorir {...base} />}
           <Metrica rotulo="Margem líquida" valor={i.margemLiquida} anterior={ia.margemLiquida} formato="pct" temBase={temBaseAnterior} />
           <Metrica rotulo="Ticket médio líquido" valor={i.ticketMedioLiquido} anterior={ia.ticketMedioLiquido} {...base} />
-          <Metrica rotulo="Custo por venda" valor={i.custoPorVenda} anterior={ia.custoPorVenda} inverterSinal {...base} />
+          <Metrica rotulo="CPA (anúncios ÷ vendas)" valor={i.cpa} anterior={ia.cpa} inverterSinal {...base} />
+          <Metrica rotulo="ROI" valor={i.roi} anterior={ia.roi} formato="razao" temBase={temBaseAnterior} nota={i.roi == null ? "sem custos no período" : "lucro ÷ (anúncios + IA + taxas + imposto)"} />
           <Metrica rotulo="ROAS" valor={i.roas} anterior={ia.roas} formato="razao" temBase={temBaseAnterior} nota={i.roas == null ? "sem receita no período" : undefined} />
           <Metrica rotulo="POAS" valor={i.poas} anterior={ia.poas} formato="razao" temBase={temBaseAnterior} nota={i.poas == null ? "sem receita no período" : undefined} />
           <Metrica rotulo="Imposto sobre lucro" valor={t.impostoLucro} anterior={a.impostoLucro} inverterSinal {...base} />
@@ -160,6 +187,37 @@ export default async function Detalhes({ searchParams }: { searchParams: Promise
           <Metrica rotulo="Ticket médio líquido" valor={i.ticketMedioLiquido} anterior={ia.ticketMedioLiquido} {...base} />
         </div>
       </Secao>
+
+      <Secao id="formas" titulo="Por forma de pagamento" resumo={formas.length ? formas.map((f) => `${f.forma} ${fmtPctSimples(f.conversao)}`).join(" · ") : "sem pedidos"}>
+        <div className="grade-metricas">
+          {formas.map((f) => (
+            <div key={f.forma} className="metrica">
+              <div className="metrica-k">{f.forma}</div>
+              <div className="metrica-v num">{money(f.aprovadasValor)} <span className="text-sm text-ink-2">({f.aprovadasQtd})</span></div>
+              <div className="metrica-s num">pendentes {f.pendentesQtd} ({money(f.pendentesValor)}) · outros {f.outrasQtd} · conversão {fmtPctSimples(f.conversao)}</div>
+            </div>
+          ))}
+          {formas.length === 0 && <p className="text-xs text-ink-3">Nenhum pedido no período.</p>}
+        </div>
+        <p className="text-xs text-ink-3">Só as formas que a Zenith informa (OXXO, SPEI; “outros” quando o pedido veio sem forma). Conversão = aprovados ÷ todos os pedidos criados no período.</p>
+      </Secao>
+
+      <Secao id="metas" titulo="Metas do mês" resumo={metas.length ? metas.map((m) => `${m.rotulo} ${fmtPctSimples(m.progresso)}`).join(" · ") : "sem meta cadastrada"}>
+        {metas.length === 0 ? <p className="text-xs text-ink-3">Cadastre em <a className="underline" href="/parametros">Parâmetros</a>: meta_receita_mes e meta_lucro_mes (R$).</p> : metas.map((m) => (
+          <div key={m.chave} className="meta-linha">
+            <div className="flex justify-between text-sm"><span>{m.rotulo}</span><span className="num">{money(m.realizado)} de {money(m.meta)} · <b className={m.progresso >= 1 ? "pos" : ""}>{fmtPctSimples(m.progresso)}</b></span></div>
+            <div className="meta-barra"><div style={{ width: `${Math.round(m.progresso * 100)}%` }} /></div>
+            <div className="text-xs text-ink-3 num">{m.faltam > 0 ? `faltam ${money(m.faltam)}${m.ritmoNecessarioPorDia != null ? ` · ${money(m.ritmoNecessarioPorDia)} por dia até o fim do mês` : ""}` : "meta batida"}</div>
+          </div>
+        ))}
+      </Secao>
+
+      {aportes.itens.length > 0 && (
+        <Secao id="aportes" titulo="Aportes dos sócios" resumo={`${money(aportes.total)} · fora do lucro`}>
+          <ul className="text-sm num">{aportes.itens.map((x, k) => <li key={k}>{fmtHora(x.quando, estado.tz)} · {x.descricao} · {money(x.brl)}</li>)}</ul>
+          <p className="text-xs text-ink-3">Aporte não é receita: fica fora de todas as fórmulas. Total no período {money(aportes.total)}.</p>
+        </Secao>
+      )}
 
       <Secao id="numeros" titulo="Por número de WhatsApp" resumo={topNumero ? `maior gasto: ${topNumero.numero} ${money(topNumero.gasto)}` : "sem gasto no período"}>
         <TabelaNumeros lancamentos={ctx.entrada.lancamentos} periodo={estado.periodo} params={ctx.params} incluirHistorico={estado.incluirHistorico} {...d} />

@@ -57,7 +57,7 @@ export type Frequencia = "unica" | "diaria" | "semanal" | "mensal" | "trimestral
 
 export type ManualCalc = {
   id: number | string;
-  tipo: "saida" | "entrada";
+  tipo: "saida" | "entrada" | "aporte"; // aporte: fora de todas as fórmulas
   moeda: string;
   valor: number;
   categoria: string;
@@ -143,6 +143,9 @@ export type ResultadoDRE = {
     custoPorVenda: number | null;
     ticketMedioLiquido: number | null;
     pontoEquilibrio: number; // quanto falta de receita líquida para lucro bruto = 0 (0 se já positivo)
+    roi: number | null; // lucro líquido ÷ (anúncios c/ imposto + IA + taxas Zenith + imposto sobre lucro)
+    taxasEImpostos: number; // taxas da Zenith (%, fixa, câmbio) + imposto sobre lucro
+    cpa: number | null; // anúncios c/ imposto ÷ vendas aprovadas (= custo por venda)
   };
   porProduto: { produto: string; qtd: number; receitaLiquida: number; ticketMedio: number }[] | null;
   porProdutoIndisponivel?: string;

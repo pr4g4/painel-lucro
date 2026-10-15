@@ -9,7 +9,7 @@ export const GRUPOS: Grupo[] = [
   { rotulo: "Visão geral", icone: "◎", itens: [["/", "Início"], ["/detalhes", "Detalhes"], ["/resumo", "Resumo (simples)"]] },
   { rotulo: "Resultados", icone: "▤", itens: [["/dre", "DRE"], ["/custos", "Custos por tipo"], ["/produtos", "Por produto"]] },
   { rotulo: "Campanhas", icone: "◍", itens: [["/campanhas", "Campanhas"]] },
-  { rotulo: "Dados", icone: "⊞", itens: [["/lancamentos", "Lançamentos"], ["/manuais", "Lançamentos manuais"], ["/venda-manual", "Venda manual"], ["/importar", "Importar CSV"]] },
+  { rotulo: "Dados", icone: "⊞", itens: [["/pedidos", "Pedidos"], ["/lancamentos", "Lançamentos"], ["/manuais", "Lançamentos manuais"], ["/venda-manual", "Venda manual"], ["/importar", "Importar CSV"]] },
 ];
 const AVISOS: [string, string] = ["/avisos", "Avisos"];
 const PARAMETROS: [string, string] = ["/parametros", "Parâmetros"];

@@ -34,7 +34,7 @@ await p.goto("http://localhost:3000/dre?de=2026-10-03T00:00&ate=2026-10-03T06:00
 await p.click("button:has-text('Analisar por intervalo')"); await p.click("button[aria-label=expandir] >> nth=0");
 await p.screenshot({ path: `${OUT}/dre-intervalos.png`, fullPage: true });
 
-for (const rota of ["detalhes", "campanhas", "manuais", "venda-manual", "custos", "lancamentos", "produtos", "avisos", "parametros"]) {
+for (const rota of ["detalhes", "pedidos", "campanhas", "manuais", "venda-manual", "custos", "lancamentos", "produtos", "avisos", "parametros"]) {
   const r = await p.goto(`http://localhost:3000/${rota}`); console.log(rota, r.status());
   await p.screenshot({ path: `${OUT}/${rota}.png`, fullPage: rota !== "lancamentos" });
 }

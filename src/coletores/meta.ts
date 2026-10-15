@@ -13,13 +13,14 @@ import { lembrar } from "@/lib/memoria";
 
 export type MetaLinha = {
   campaign_id: string; campaign_name: string; spend: string; date_start: string; // AAAA-MM-DD no fuso da conta
+  impressions?: string; clicks?: string; // entrega (para CTR, CPC, CPM na tela de campanhas)
   hourly_stats_aggregated_by_advertiser_time_zone?: string; // "HH:00:00 - HH:59:59"
   effective_status?: string;
 };
 export interface MetaCliente {
   /** Tenta hora; devolve { granularidade } informando o que a conta conseguiu entregar. */
   insights(contaId: string, deDia: string, ateDia: string): Promise<{ linhas: MetaLinha[]; granularidade: "hora" | "dia"; fusoConta: string }>;
-  campanhas(contaId: string): Promise<{ id: string; name: string; effective_status: string }[]>;
+  campanhas(contaId: string): Promise<{ id: string; name: string; effective_status: string; daily_budget?: string; moeda?: string }[]>;
   /** Fuso da conta (1 chamada; o coletor guarda em memória por 24 h). Opcional: sem ele, insights() informa. */
   fuso?(contaId: string): Promise<string>;
 }
@@ -71,7 +72,7 @@ export function metaClienteReal(token: string): MetaCliente {
     fuso,
     async insights(contaId, deDia, ateDia) {
       const conta = { timezone_name: await fuso(contaId) };
-      const base = { level: "campaign", fields: "campaign_id,campaign_name,spend", time_range: JSON.stringify({ since: deDia, until: ateDia }), time_increment: "1", limit: "500" };
+      const base = { level: "campaign", fields: "campaign_id,campaign_name,spend,impressions,clicks", time_range: JSON.stringify({ since: deDia, until: ateDia }), time_increment: "1", limit: "500" };
       // 1) síncrono por hora
       const sinc = await get<{ data: MetaLinha[]; paging?: { next?: string } }>(`${contaId}/insights`, { ...base, breakdowns: "hourly_stats_aggregated_by_advertiser_time_zone" });
       let linhas = await paginar(sinc);
@@ -96,8 +97,9 @@ export function metaClienteReal(token: string): MetaCliente {
       return { linhas: await paginar(dia), granularidade: "dia", fusoConta: conta.timezone_name };
     },
     async campanhas(contaId) {
-      const r = await get<{ data: { id: string; name: string; effective_status: string }[]; paging?: { next?: string } }>(`${contaId}/campaigns`, { fields: "id,name,effective_status", limit: "500" });
-      return paginar(r);
+      const r = await get<{ data: { id: string; name: string; effective_status: string; daily_budget?: string }[]; paging?: { next?: string } }>(`${contaId}/campaigns`, { fields: "id,name,effective_status,daily_budget", limit: "500" });
+      const moeda = await lembrar(`meta:moeda:${contaId}`, async () => (await get<{ currency: string }>(contaId, { fields: "currency" })).currency, { ttlMs: 24 * 3_600_000, rotulo: "moeda da conta Meta" });
+      return (await paginar(r)).map((c) => ({ ...c, moeda }));
     },
   };
 }
@@ -151,8 +153,9 @@ export async function coletarMeta(cliente: MetaCliente, contas: string[], agora 
       const camps = plano.buscaCampanhas ? await cliente.campanhas(contaId) : [];
       if (plano.buscaCampanhas) chamadas++;
       for (const c of camps) {
-        await db.insert(schema.campanhas).values({ contaId, campanhaId: c.id, nome: c.name, status: c.effective_status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId: await resolverFrente(c.name, frentes), atualizadoEm: new Date() })
-          .onConflictDoUpdate({ target: [schema.campanhas.contaId, schema.campanhas.campanhaId], set: { nome: c.name, status: c.effective_status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId: await resolverFrente(c.name, frentes), atualizadoEm: new Date() } });
+        const orc = c.daily_budget != null && c.daily_budget !== "" ? String(Number(c.daily_budget) / 100) : null; // a Meta devolve em centavos da moeda da conta
+        await db.insert(schema.campanhas).values({ contaId, campanhaId: c.id, nome: c.name, status: c.effective_status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId: await resolverFrente(c.name, frentes), orcamentoDiario: orc, orcamentoMoeda: c.moeda ?? null, atualizadoEm: new Date() })
+          .onConflictDoUpdate({ target: [schema.campanhas.contaId, schema.campanhas.campanhaId], set: { nome: c.name, status: c.effective_status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId: await resolverFrente(c.name, frentes), orcamentoDiario: orc, orcamentoMoeda: c.moeda ?? null, atualizadoEm: new Date() } });
       }
 
       const rows: NovoLancamento[] = [];

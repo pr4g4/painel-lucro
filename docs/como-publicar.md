@@ -56,6 +56,7 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
 - `drizzle/0001_zenith_eventos.sql` (tabela de eventos do webhook) — já rodou se o webhook funciona.
 - `drizzle/0002_indices_desempenho.sql` (índices; deixa as páginas rápidas): raw https://raw.githubusercontent.com/pr4g4/painel-lucro/main/drizzle/0002_indices_desempenho.sql → cole → Run.
 - `drizzle/0003_alertas.sql` (estado dos alertas de WhatsApp).
+- `drizzle/0004_aporte_e_ads.sql` (aporte de sócio nos lançamentos manuais; orçamento diário das campanhas): raw https://raw.githubusercontent.com/pr4g4/painel-lucro/main/drizzle/0004_aporte_e_ads.sql → cole → Run.
 - Depois de qualquer deploy que crie parâmetros novos, abra `https://SEU-SITE.vercel.app/api/seed?segredo=…` (cria só o que falta).
 
 ## Parte 4 — Ligar cada fonte (quando tiver a chave)

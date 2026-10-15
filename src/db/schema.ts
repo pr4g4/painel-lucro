@@ -52,6 +52,8 @@ export const campanhas = pgTable("campanhas", {
   status: text("status"),
   numeroWhatsapp: text("numero_whatsapp"), // 9302 / 8699 / 6699
   frenteId: integer("frente_id").references(() => frentes.id),
+  orcamentoDiario: numeric("orcamento_diario", { precision: 14, scale: 2 }),
+  orcamentoMoeda: text("orcamento_moeda"),
   atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("campanhas_conta_campanha").on(t.contaId, t.campanhaId)]);
 
@@ -119,7 +121,7 @@ export const vendas = pgTable("vendas", {
 ]);
 
 // ---------- lançamentos manuais (saída/entrada, única ou recorrente) ----------
-export const tipoManualEnum = pgEnum("tipo_manual", ["saida", "entrada"]);
+export const tipoManualEnum = pgEnum("tipo_manual", ["saida", "entrada", "aporte"]); // aporte = dinheiro dos sócios, fora do lucro
 export const frequenciaEnum = pgEnum("frequencia", ["unica", "diaria", "semanal", "mensal", "trimestral", "semestral", "anual"]);
 
 export const linhaDreEnum = pgEnum("linha_dre", ["zapdata", "ia", "operacao"]);

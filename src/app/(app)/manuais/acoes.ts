@@ -24,7 +24,7 @@ async function gravarManual(form: FormData): Promise<EstadoGravar> {
   const freq = String(form.get("frequencia")) as (typeof FREQ)[number];
   const termina = String(form.get("terminaEm") || "");
   const dados = {
-    tipo: (form.get("tipo") === "entrada" ? "entrada" : "saida") as "saida" | "entrada",
+    tipo: (form.get("tipo") === "entrada" ? "entrada" : form.get("tipo") === "aporte" ? "aporte" : "saida") as "saida" | "entrada" | "aporte",
     moeda: ["BRL", "MXN", "USD"].includes(String(form.get("moeda"))) ? String(form.get("moeda")) : "BRL",
     valor: String(valor),
     categoriaId: form.get("categoriaId") ? Number(form.get("categoriaId")) : null,

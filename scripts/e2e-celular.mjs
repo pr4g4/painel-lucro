@@ -26,6 +26,7 @@ await viaFolha("Resultados", "DRE", "/dre");
 await viaFolha("Resultados", "Custos por tipo", "/custos");
 await viaFolha("Resultados", "Por produto", "/produtos");
 await p.locator('.barra-inferior a:has-text("Campanhas")').tap(); await p.waitForTimeout(900); chk("menu Campanhas", new URL(p.url()).pathname === "/campanhas", p.url());
+await viaFolha("Mais", "Pedidos", "/pedidos");
 await viaFolha("Mais", "Lançamentos", "/lancamentos");
 await viaFolha("Mais", "Lançamentos manuais", "/manuais");
 await viaFolha("Mais", "Venda manual", "/venda-manual");
@@ -58,7 +59,7 @@ chk("sair", p.url().includes("/login"), p.url());
 // cobertura em todas as páginas (nada por cima de botão visível)
 await p.waitForLoadState("networkidle"); await p.waitForTimeout(800);
 await p.fill('input[name=usuario]', "erick"); await p.fill('input[name=senha]', "erick123"); await p.tap("button:has-text('Entrar')"); await p.waitForURL("http://localhost:3000/");
-for (const rota of ["/", "/detalhes", "/resumo", "/dre", "/campanhas", "/manuais", "/venda-manual", "/custos", "/lancamentos", "/produtos", "/avisos", "/parametros"]) {
+for (const rota of ["/", "/detalhes", "/resumo", "/dre", "/campanhas", "/pedidos", "/manuais", "/venda-manual", "/custos", "/lancamentos", "/produtos", "/avisos", "/parametros"]) {
   await p.goto(`http://localhost:3000${rota}`); await p.waitForLoadState("networkidle");
   const r = await p.evaluate(() => {
     const out = [];

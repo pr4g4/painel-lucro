@@ -7,3 +7,4 @@ export * from "./operacao";
 export * from "./creditos";
 export * from "./ia";
 export * from "./hora";
+export * from "./profitfy";

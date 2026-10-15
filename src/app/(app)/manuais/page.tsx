@@ -23,7 +23,7 @@ export default async function Manuais({ searchParams }: { searchParams: Promise<
   const filtroCat = typeof sp.cat === "string" ? sp.cat : "";
   const linhas = manuais.filter((m) => (!filtroTipo || m.tipo === filtroTipo) && (!filtroCat || m.categoria === filtroCat))
     .map((m) => ({ m, noPeriodo: valorBrlNoPeriodo(m, estado.periodo, estado.tz, cambio) }));
-  const total = linhas.reduce((s, l) => s + (l.m.tipo === "entrada" ? l.noPeriodo.brl : -l.noPeriodo.brl), 0);
+  const total = linhas.reduce((s, l) => s + (l.m.tipo === "aporte" ? 0 : l.m.tipo === "entrada" ? l.noPeriodo.brl : -l.noPeriodo.brl), 0); // aporte não entra no saldo
   const editar = typeof sp.editar === "string" ? manuais.find((m) => String(m.id) === sp.editar) : undefined;
   const editarRow = editar ? (await executar((d) => d.select().from(schema.lancamentosManuais).where(eq(schema.lancamentosManuais.id, Number(editar.id))), 15000, "lançamento"))[0] : undefined;
 
@@ -35,7 +35,7 @@ export default async function Manuais({ searchParams }: { searchParams: Promise<
         <FormGravar acao={salvarManual} className="card p-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-sm" botao={editarRow ? "Salvar alteração" : "Adicionar"} extra={editarRow ? <a href="/manuais" className="btn">Cancelar</a> : null}>
           <input type="hidden" name="tz" value={estado.tz} />
           {editarRow && <input type="hidden" name="id" value={editarRow.id} />}
-          <label>Tipo<select name="tipo" defaultValue={editarRow?.tipo ?? "saida"} className="w-full"><option value="saida">Saída</option><option value="entrada">Entrada</option></select></label>
+          <label>Tipo<select name="tipo" defaultValue={editarRow?.tipo ?? "saida"} className="w-full"><option value="saida">Saída</option><option value="entrada">Entrada</option><option value="aporte">Aporte de sócio (fora do lucro)</option></select></label>
           <label>Moeda<select name="moeda" defaultValue={editarRow?.moeda ?? "BRL"} className="w-full"><option>BRL</option><option>MXN</option><option>USD</option></select></label>
           <label>Valor<input name="valor" inputMode="decimal" required defaultValue={editarRow ? Number(editarRow.valor) : ""} className="w-full" /></label>
           <label>Categoria<select name="categoriaId" defaultValue={editarRow?.categoriaId ?? ""} className="w-full"><option value="">—</option>{cats.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
@@ -48,7 +48,7 @@ export default async function Manuais({ searchParams }: { searchParams: Promise<
       )}
       <form className="flex flex-wrap gap-2 text-sm items-end">
         {Object.entries(sp).filter(([k]) => !["tipo", "cat"].includes(k)).map(([k, v]) => <input key={k} type="hidden" name={k} value={String(v)} />)}
-        <label>Tipo<select name="tipo" defaultValue={filtroTipo} className="ml-1"><option value="">todos</option><option value="saida">saída</option><option value="entrada">entrada</option></select></label>
+        <label>Tipo<select name="tipo" defaultValue={filtroTipo} className="ml-1"><option value="">todos</option><option value="saida">saída</option><option value="entrada">entrada</option><option value="aporte">aporte</option></select></label>
         <label>Categoria<select name="cat" defaultValue={filtroCat} className="ml-1"><option value="">todas</option>{cats.map((c) => <option key={c.id} value={c.nome}>{c.nome}</option>)}</select></label>
         <button className="btn">Filtrar</button>
       </form>
