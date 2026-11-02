@@ -115,18 +115,20 @@ export async function calcularPeriodoComAnterior(periodo: Periodo, op: OpcoesCon
 
 /** Última coleta por fonte, para o carimbo "atualizado às": uma linha por fonte, agregada no banco. */
 export type EstadoColeta = { ultimaOk: Date | null; ultima: Date; erro: string | null; falhasSeguidas: number; naoConfigurada: boolean };
-const coletasCache = unstable_cache(() => lembrar("coletas", async () => {
+/** Leitura bruta (sem cache) do estado das coletas; exportada para testes. */
+export async function lerColetasBruto() {
   const rows = await executar((d) => d.execute(sql`
     with ult_ok as (select fonte, max(coalesce(terminada_em, iniciada_em)) as ultima_ok from coletas where ok group by fonte)
     select c.fonte,
            max(c.iniciada_em) as ultima,
            u.ultima_ok,
-           count(*) filter (where c.ok = false and c.iniciada_em > coalesce(u.ultima_ok, '1970-01-01'))::int as falhas_seguidas,
+           count(*) filter (where c.ok = false and c.iniciada_em > coalesce(u.ultima_ok, '1970-01-01') and coalesce(c.erro, '') not like 'não configurada%')::int as falhas_seguidas,
            (array_agg(c.erro order by c.iniciada_em desc) filter (where c.ok = false and c.iniciada_em > coalesce(u.ultima_ok, '1970-01-01')))[1] as erro
     from coletas c left join ult_ok u on u.fonte = c.fonte
     group by c.fonte, u.ultima_ok`), 8000, "coletas") as unknown as { fonte: string; ultima: string | Date; ultima_ok: string | Date | null; falhas_seguidas: number; erro: string | null }[];
   return rows.map((r) => ({ fonte: r.fonte, ultima: new Date(r.ultima).toISOString(), ultimaOk: r.ultima_ok ? new Date(r.ultima_ok).toISOString() : null, erro: r.erro, falhasSeguidas: r.falhas_seguidas }));
-}, { ttlMs: 0, rotulo: "coletas" }), ["coletas"], { revalidate: 60, tags: [TAG_DADOS] });
+}
+const coletasCache = unstable_cache(() => lembrar("coletas", lerColetasBruto, { ttlMs: 0, rotulo: "coletas" }), ["coletas"], { revalidate: 60, tags: [TAG_DADOS] });
 
 export async function ultimasColetas(): Promise<Map<string, EstadoColeta>> {
   const rows = await coletasCache();

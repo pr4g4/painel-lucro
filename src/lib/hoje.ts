@@ -53,6 +53,17 @@ export function fontesAtrasadas(coletas: Map<string, EstadoColeta>, agora: Date,
   return out;
 }
 
+/** "23:50" se for hoje; senão "14/10 23:50 (há 18 dias)". */
+export function textoDesde(desde: Date | null, agora: Date, tz: string): string {
+  if (!desde) return "o início";
+  const fmt = (d: Date, f: string) => new Intl.DateTimeFormat("pt-BR", { timeZone: tz, ...(f === "dia" ? { day: "2-digit", month: "2-digit" } : { hour: "2-digit", minute: "2-digit", hour12: false }) }).format(d);
+  const mesmoDia = fmt(desde, "dia") === fmt(agora, "dia");
+  if (mesmoDia) return fmt(desde, "hora");
+  const dias = Math.round((agora.getTime() - desde.getTime()) / 86_400_000);
+  const ha = dias >= 1 ? `há ${dias} dia${dias > 1 ? "s" : ""}` : `há ${Math.round((agora.getTime() - desde.getTime()) / 3_600_000)} h`;
+  return `${fmt(desde, "dia")} ${fmt(desde, "hora")} (${ha})`;
+}
+
 export function coletaFalhando(c: EstadoColeta | undefined, agora: Date): boolean {
   if (!c) return false;
   if (c.naoConfigurada) return false;

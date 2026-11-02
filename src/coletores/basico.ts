@@ -16,10 +16,19 @@ export async function garantirBasico(): Promise<string[]> {
     await db.insert(schema.parametros).values({ chave, valor, observacao, vigenciaInicio: inicio });
     feito.push(`parâmetro ${chave} = ${valor}`);
   }
-  for (const f of [{ nome: "Fotos IA MX", regraCampanha: "REST\\.?\\s*FOTO|FOTOS? IA", ativa: true, ordem: 1 }, { nome: "Cenas Ligeras", regraCampanha: "CENAS\\s*LIGERAS", ativa: false, ordem: 2 }, { nome: "Embarazo", regraCampanha: "EMBARAZO", ativa: false, ordem: 3 }])
+  for (const f of [{ nome: "Daniela Cruz", regraCampanha: "Dani\\s*Cruz|Daniela", ativa: true, ordem: 0 }, { nome: "Fotos IA MX", regraCampanha: "REST\\.?\\s*FOTO|FOTOS? IA", ativa: true, ordem: 1 }, { nome: "Cenas Ligeras", regraCampanha: "CENAS\\s*LIGERAS", ativa: false, ordem: 2 }, { nome: "Embarazo", regraCampanha: "EMBARAZO", ativa: false, ordem: 3 }])
     await db.insert(schema.frentes).values(f).onConflictDoNothing();
   for (const [nome, linhaDre] of [["ZapData", "zapdata"], ["tráfego pago", "operacao"], ["softwares e aplicativos", "operacao"], ["IA", "ia"], ["contabilidade", "operacao"], ["operação", "operacao"], ["outros", "operacao"]] as const)
     await db.insert(schema.categorias).values({ nome, linhaDre }).onConflictDoNothing();
+  // campanhas já gravadas ganham a frente certa pela regra atual (ordem crescente; a primeira que casar vence)
+  try {
+    const { resolverFrente } = await import("./meta");
+    const frentes = await db.select({ id: schema.frentes.id, regraCampanha: schema.frentes.regraCampanha }).from(schema.frentes).orderBy(schema.frentes.ordem);
+    const camps = await db.select({ id: schema.campanhas.id, nome: schema.campanhas.nome, frenteId: schema.campanhas.frenteId }).from(schema.campanhas);
+    let mudadas = 0;
+    for (const c of camps) { const f = await resolverFrente(c.nome, frentes); if (f !== c.frenteId) { await db.update(schema.campanhas).set({ frenteId: f }).where(eq(schema.campanhas.id, c.id)); mudadas++; } }
+    if (mudadas) feito.push(`${mudadas} campanha(s) reatribuída(s) de frente`);
+  } catch (e) { console.warn("[basico] reatribuição de frentes falhou:", e instanceof Error ? e.message : e); }
   const [catZap] = await db.select().from(schema.categorias).where(eq(schema.categorias.nome, "ZapData"));
   const [zap] = await db.select().from(schema.lancamentosManuais).where(eq(schema.lancamentosManuais.descricao, "ZapData mensalidade")).limit(1);
   if (!zap && catZap) { await db.insert(schema.lancamentosManuais).values({ tipo: "saida", moeda: "BRL", valor: "119", categoriaId: catZap.id, descricao: "ZapData mensalidade", frequencia: "mensal", comecaEm: new Date("2026-10-02T03:00:00Z"), ativo: true }); feito.push("ZapData recorrente"); }

@@ -27,6 +27,7 @@ export default async function Avisos() {
           {["meta", "tiktok", "zenith", "cambio", "openai", "kie"].map((f) => {
             const c = coletas.get(f);
             const atras = !c?.ultimaOk || agora - c.ultimaOk.getTime() > 30 * 60_000;
+            if (c?.naoConfigurada) return <div key={f} className="card p-2 text-ink-3"><b>{ROTULO_FONTE[f]}</b><div className="text-xs">não configurada (sem chave no host) · não conta falha nem alerta</div></div>;
             return <div key={f} className={`card p-2 ${atras && f !== "zenith" ? "border-warn" : ""}`}><b>{ROTULO_FONTE[f]}</b><div className="text-xs text-ink-2">última coleta ok: {c?.ultimaOk ? fmtDataHora(c.ultimaOk, TZ, "dd/MM HH:mm") : "nunca"}{c?.erro && <div className="text-neg">erro: {c.erro}</div>}{c?.falhasSeguidas ? <div className="text-warn">{c.falhasSeguidas} falha(s) seguida(s)</div> : null}</div></div>;
           })}
         </div>

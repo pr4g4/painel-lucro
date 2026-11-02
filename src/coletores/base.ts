@@ -38,7 +38,7 @@ export async function abrirAviso(tipo: string, fonte: string | null, mensagem: s
 
 export async function resolverAvisos(fonte: string, tipo: string) {
   await db.update(schema.avisos).set({ resolvidoEm: new Date() })
-    .where(and(eq(schema.avisos.fonte, fonte), eq(schema.avisos.tipo, tipo), isNull(schema.avisos.resolvidoEm)));
+    .where(and(fonte ? eq(schema.avisos.fonte, fonte) : isNull(schema.avisos.fonte), eq(schema.avisos.tipo, tipo), isNull(schema.avisos.resolvidoEm)));
 }
 
 /** Upsert idempotente por chave natural: rodar duas vezes não duplica nem muda totais. */

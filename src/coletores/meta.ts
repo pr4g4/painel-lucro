@@ -139,7 +139,7 @@ export async function coletarMeta(cliente: MetaCliente, contas: string[], agora 
     const inicioHoje = fromZonedTime(`${diaNoFuso(agora, TZ_APP)}T00:00:00`, TZ_APP);
     const de = horasRetro != null ? new Date(agora.getTime() - horasRetro * 3_600_000) : plano.refazOntem ? new Date(inicioHoje.getTime() - 86_400_000) : inicioHoje;
     detalhe.plano = { ...plano, desde: de.toISOString() };
-    let chamadas = 0;
+    let chamadas = 0; const errosMetadados: string[] = [];
     for (const contaId of contas) {
       try {
       // período em dias no fuso da conta: desde o dia (no fuso da conta) que contém `de` até o dia de agora
@@ -149,29 +149,18 @@ export async function coletarMeta(cliente: MetaCliente, contas: string[], agora 
       const { linhas, granularidade } = ins; const fuso = ins.fusoConta;
       detalhe[contaId] = { granularidade, linhas: linhas.length, fusoConta: fuso, desde: diaDe };
 
-      // campanhas (nome, status, número, frente): 1× por hora
-      const camps = plano.buscaCampanhas ? await cliente.campanhas(contaId) : [];
-      if (plano.buscaCampanhas) chamadas++;
-      for (const c of camps) {
-        const orc = c.daily_budget != null && c.daily_budget !== "" ? String(Number(c.daily_budget) / 100) : null; // a Meta devolve em centavos da moeda da conta
-        await db.insert(schema.campanhas).values({ contaId, campanhaId: c.id, nome: c.name, status: c.effective_status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId: await resolverFrente(c.name, frentes), orcamentoDiario: orc, orcamentoMoeda: c.moeda ?? null, atualizadoEm: new Date() })
-          .onConflictDoUpdate({ target: [schema.campanhas.contaId, schema.campanhas.campanhaId], set: { nome: c.name, status: c.effective_status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId: await resolverFrente(c.name, frentes), orcamentoDiario: orc, orcamentoMoeda: c.moeda ?? null, atualizadoEm: new Date() } });
-      }
+      // GASTO PRIMEIRO: o que importa para o lucro é gravado antes de qualquer metadado
+      total += await upsertLancamentos(linhasParaLancamentos(linhas, granularidade, fuso, contaId, de, marco));
 
-      const rows: NovoLancamento[] = [];
-      for (const l of linhas) {
-        const hora = l.hourly_stats_aggregated_by_advertiser_time_zone ? Number(l.hourly_stats_aggregated_by_advertiser_time_zone.slice(0, 2)) : 0;
-        const instante = fromZonedTime(`${l.date_start}T${String(hora).padStart(2, "0")}:00:00`, fuso);
-        if (instante < de && granularidade === "hora") continue;
-        const spend = Number(l.spend);
-        if (!Number.isFinite(spend)) continue;
-        rows.push({
-          fonte: "meta", tipo: "gasto_anuncio", chaveNatural: `meta|${contaId}|${l.campaign_id}|${instante.toISOString()}`,
-          instante, granularidade, descricao: l.campaign_name, valorOriginal: String(spend), moeda: "BRL", valorBrl: String(spend), taxaCambio: "1",
-          contaId, campanhaId: l.campaign_id, historico: instante < marco, payload: l,
-        });
+      // campanhas (nome, status, número, frente, orçamento): 1× por hora; falha aqui vira aviso separado, nunca derruba o gasto
+      if (plano.buscaCampanhas) {
+        chamadas++;
+        try {
+          const camps = await cliente.campanhas(contaId);
+          const erroMeta = await gravarCampanhas(contaId, camps, frentes);
+          if (erroMeta) { errosMetadados.push(`${contaId}: ${erroMeta}`); (detalhe[contaId] as Record<string, unknown>).metadados = erroMeta; }
+        } catch (e) { const msg = (e instanceof Error ? e.message : String(e)).slice(0, 300); errosMetadados.push(`${contaId}: ${msg}`); (detalhe[contaId] as Record<string, unknown>).metadados = msg; }
       }
-      total += await upsertLancamentos(rows);
       } catch (e) {
         // uma conta bloqueada não impede a outra; o erro completo vai para o aviso
         const msg = e instanceof Error ? e.message : String(e);
@@ -179,11 +168,83 @@ export async function coletarMeta(cliente: MetaCliente, contas: string[], agora 
       }
     }
     detalhe.chamadasMeta = chamadas;
+    if (errosMetadados.length) await abrirAviso("metadados_campanhas", "meta", `Meta: gasto gravado, mas os dados das campanhas (nome/status/orçamento) não: ${errosMetadados.join(" | ")}`);
+    else await resolverAvisos("meta", "metadados_campanhas");
     if (errosPorConta.length === contas.length) throw new Error(errosPorConta.join(" | "));
     if (errosPorConta.length) await abrirAviso("coleta_parcial", "meta", `Meta: ${errosPorConta.join(" | ")}`);
     else await resolverAvisos("meta", "coleta_parcial");
     return { registros: total, detalhe };
   });
+}
+
+/** Linhas da Meta → lançamentos (chave natural meta|conta|campanha|instante: rodar de novo não duplica). */
+export function linhasParaLancamentos(linhas: MetaLinha[], granularidade: "hora" | "dia", fuso: string, contaId: string, de: Date, marco: Date): NovoLancamento[] {
+  const rows: NovoLancamento[] = [];
+  for (const l of linhas) {
+    const hora = l.hourly_stats_aggregated_by_advertiser_time_zone ? Number(l.hourly_stats_aggregated_by_advertiser_time_zone.slice(0, 2)) : 0;
+    const instante = fromZonedTime(`${l.date_start}T${String(hora).padStart(2, "0")}:00:00`, fuso);
+    if (instante < de && granularidade === "hora") continue;
+    const spend = Number(l.spend);
+    if (!Number.isFinite(spend)) continue;
+    rows.push({
+      fonte: "meta", tipo: "gasto_anuncio", chaveNatural: `meta|${contaId}|${l.campaign_id}|${instante.toISOString()}`,
+      instante, granularidade, descricao: l.campaign_name, valorOriginal: String(spend), moeda: "BRL", valorBrl: String(spend), taxaCambio: "1",
+      contaId, campanhaId: l.campaign_id, historico: instante < marco, payload: l,
+    });
+  }
+  return rows;
+}
+
+/**
+ * Grava nome/status/número/frente/orçamento das campanhas. Tenta com as colunas de orçamento (migração 0004); se o banco
+ * ainda não as tiver, grava sem elas. Devolve a mensagem de erro (ou null) em vez de lançar: metadado nunca bloqueia o gasto.
+ */
+export async function gravarCampanhas(contaId: string, camps: { id: string; name: string; effective_status: string; daily_budget?: string; moeda?: string }[], frentes: { id: number; regraCampanha: string }[]): Promise<string | null> {
+  let semOrcamento = false;
+  for (const c of camps) {
+    const basico = { nome: c.name, status: c.effective_status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId: await resolverFrente(c.name, frentes), atualizadoEm: new Date() };
+    const orc = c.daily_budget != null && c.daily_budget !== "" ? String(Number(c.daily_budget) / 100) : null; // a Meta devolve em centavos da moeda da conta
+    const comOrc = { ...basico, orcamentoDiario: orc, orcamentoMoeda: c.moeda ?? null };
+    try {
+      if (!semOrcamento) {
+        await db.insert(schema.campanhas).values({ contaId, campanhaId: c.id, ...comOrc }).onConflictDoUpdate({ target: [schema.campanhas.contaId, schema.campanhas.campanhaId], set: comOrc });
+        continue;
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? `${e.message} ${(e as { cause?: Error }).cause?.message ?? ""}` : String(e);
+      if (!/orcamento_(diario|moeda)/.test(msg)) return msg.slice(0, 300);
+      semOrcamento = true; // colunas da 0004 ausentes: segue sem orçamento
+    }
+    try { await db.insert(schema.campanhas).values({ contaId, campanhaId: c.id, ...basico }).onConflictDoUpdate({ target: [schema.campanhas.contaId, schema.campanhas.campanhaId], set: basico }); }
+    catch (e) { return (e instanceof Error ? e.message : String(e)).slice(0, 300); }
+  }
+  return semOrcamento ? "colunas de orçamento ausentes (migração 0004 pendente); campanhas gravadas sem orçamento" : null;
+}
+
+/**
+ * Recupera um intervalo de dias (inclusive), dia a dia, por hora, com pausa entre chamadas. Idempotente.
+ * Para em `limiteMs` e devolve de onde continuar (a Vercel limita a função a 60 s).
+ */
+export async function recuperarMeta(cliente: MetaCliente, contas: string[], deDia: string, ateDia: string, limiteMs = 45_000, pausaMs = 1200) {
+  const t0 = Date.now();
+  const marco = await marcoZeroAtual();
+  const dias: { dia: string; conta: string; linhas: number; gravados: number; erro?: string }[] = [];
+  let proximo: string | null = null; let chamadas = 0;
+  for (let d = new Date(`${deDia}T12:00:00Z`); diaNoFuso(d, "UTC") <= ateDia; d = new Date(d.getTime() + 86_400_000)) {
+    const dia = diaNoFuso(d, "UTC");
+    if (Date.now() - t0 > limiteMs) { proximo = dia; break; }
+    for (const contaId of contas) {
+      try {
+        const fuso = cliente.fuso ? await cliente.fuso(contaId) : TZ_APP;
+        const { linhas, granularidade, fusoConta } = await cliente.insights(contaId, dia, dia); chamadas++;
+        const inicioDia = fromZonedTime(`${dia}T00:00:00`, fusoConta || fuso);
+        const gravados = await upsertLancamentos(linhasParaLancamentos(linhas, granularidade, fusoConta || fuso, contaId, inicioDia, marco));
+        dias.push({ dia, conta: contaId, linhas: linhas.length, gravados });
+      } catch (e) { dias.push({ dia, conta: contaId, linhas: 0, gravados: 0, erro: e instanceof Error ? e.message : String(e) }); }
+      await new Promise((r) => setTimeout(r, pausaMs));
+    }
+  }
+  return { dias, chamadas, proximo, duracaoMs: Date.now() - t0 };
 }
 
 function diaNoFuso(d: Date, tz: string): string {

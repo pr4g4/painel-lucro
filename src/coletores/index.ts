@@ -54,6 +54,14 @@ async function naoConfigurada(fonte: string, vars: string): Promise<ResultadoCol
 /** Ordem importa: câmbio antes das fontes em USD. */
 export async function coletarTudo(): Promise<ResultadoColeta[]> {
   const out: ResultadoColeta[] = [];
+  try {
+    const { verificarEsquema, mensagemMigracao } = await import("@/db/esquema");
+    const { resolverAvisos } = await import("./base");
+    const es = await verificarEsquema();
+    if (es.pendentes.length) await abrirAviso("migracao_pendente", null, mensagemMigracao(es.pendentes));
+    else if (!es.erro) await resolverAvisos("", "migracao_pendente").catch(() => {});
+    if (es.aplicados.length || es.pendentes.length || es.erro) out.push({ fonte: "esquema", ok: es.ok, registros: es.aplicados.length, erro: es.erro ?? (es.pendentes.length ? mensagemMigracao(es.pendentes) : undefined), detalhe: { aplicados: es.aplicados, pendentes: es.pendentes } });
+  } catch (e) { out.push({ fonte: "esquema", ok: false, registros: 0, erro: e instanceof Error ? e.message : String(e) }); }
   try { const { garantirBasico } = await import("./basico"); const feito = await garantirBasico(); if (feito.length) out.push({ fonte: "basico", ok: true, registros: feito.length, detalhe: { feito } }); }
   catch (e) { out.push({ fonte: "basico", ok: false, registros: 0, erro: e instanceof Error ? e.message : String(e) }); }
   for (const f of FONTES) { const t0 = Date.now(); const r = await coletar(f); out.push({ ...r, detalhe: { ...(r.detalhe ?? {}), duracaoMs: Date.now() - t0 } }); }

@@ -134,12 +134,6 @@ export async function coletarTikTok(cliente: TikTokCliente, contas: string[], ag
       try {
         const conta = await cliente.conta(id);
         const { linhas, granularidade } = await cliente.relatorio(id, diaNoFuso(de, conta.fuso), diaNoFuso(agora, conta.fuso));
-        const camps = plano.buscaCampanhas ? await cliente.campanhas(id) : [];
-        for (const c of camps) {
-          const frenteId = await resolverFrente(c.name, frentes);
-          await db.insert(schema.campanhas).values({ contaId: `tiktok:${id}`, campanhaId: c.id, nome: c.name, status: c.status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId, atualizadoEm: new Date() })
-            .onConflictDoUpdate({ target: [schema.campanhas.contaId, schema.campanhas.campanhaId], set: { nome: c.name, status: c.status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId, atualizadoEm: new Date() } });
-        }
         const rows: NovoLancamento[] = [];
         for (const l of linhas) {
           const instante = fromZonedTime(l.stat_time.length > 10 ? l.stat_time.replace(" ", "T") : `${l.stat_time}T00:00:00`, conta.fuso);
@@ -153,7 +147,16 @@ export async function coletarTikTok(cliente: TikTokCliente, contas: string[], ag
             contaId: `tiktok:${id}`, campanhaId: l.campaign_id, historico: instante < marco, payload: l,
           });
         }
-        total += await upsertLancamentos(rows);
+        total += await upsertLancamentos(rows); // gasto primeiro; metadado das campanhas depois e sem bloquear
+        if (plano.buscaCampanhas) {
+          try {
+            for (const c of await cliente.campanhas(id)) {
+              const frenteId = await resolverFrente(c.name, frentes);
+              await db.insert(schema.campanhas).values({ contaId: `tiktok:${id}`, campanhaId: c.id, nome: c.name, status: c.status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId, atualizadoEm: new Date() })
+                .onConflictDoUpdate({ target: [schema.campanhas.contaId, schema.campanhas.campanhaId], set: { nome: c.name, status: c.status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId, atualizadoEm: new Date() } });
+            }
+          } catch (e) { await abrirAviso("metadados_campanhas", "tiktok", `TikTok: gasto gravado, mas os dados das campanhas não: ${e instanceof Error ? e.message.slice(0, 200) : e}`); }
+        }
         const csvRemovidas = await removerCsvCobertoPelaApi(rows.map((r) => ({ instante: r.instante as Date, descricao: r.descricao, campanhaId: r.campanhaId ?? null })));
         detalhe[id] = { nome: conta.nome, moeda: conta.moeda, fuso: conta.fuso, linhas: linhas.length, granularidade, ...(csvRemovidas ? { csvSubstituidas: csvRemovidas } : {}) };
       } catch (e) { const msg = e instanceof Error ? e.message : String(e); erros.push(`${id}: ${msg}`); detalhe[id] = { erro: msg }; }
