@@ -21,6 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ fon
   if (!segredoOk && !sessaoOk) return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
 
   if (fonte === "todas") { const resultados = await coletarTudo(); invalidarDados(); return NextResponse.json({ resultados }); }
+  await (await import("@/db/esquema")).verificarEsquema().catch(() => null); // migrações pendentes aplicadas antes de qualquer coleta avulsa
   if (!(FONTES as readonly string[]).includes(fonte)) return NextResponse.json({ erro: `fonte desconhecida: ${fonte}` }, { status: 404 });
   const resultado = await coletar(fonte as Fonte); invalidarDados();
   return NextResponse.json({ resultado });

@@ -52,7 +52,8 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
     - Para conferir: nova query com `select * from cron.job;` → deve listar `painel-coleta-10min`.
 11. Entre no site com `erick` e a senha de `SEED_SENHA_ERICK`. Vá em **Parâmetros** e troque as senhas se quiser. Depois pode apagar `SEED_SENHA_*` da Vercel.
 
-## Migrações posteriores (rodar uma vez cada, no SQL Editor do Supabase)
+## Migrações posteriores (o app aplica sozinho; rodar à mão só se a faixa vermelha pedir)
+Desde 02/11 toda coleta começa conferindo o banco e aplica sozinha o que faltar (CREATE TABLE / ALTER ... IF NOT EXISTS). Só se o banco recusar aparece a faixa "Migração X pendente"; aí sim rode o arquivo abaixo no SQL Editor.
 - `drizzle/0001_zenith_eventos.sql` (tabela de eventos do webhook) — já rodou se o webhook funciona.
 - `drizzle/0002_indices_desempenho.sql` (índices; deixa as páginas rápidas): raw https://raw.githubusercontent.com/pr4g4/painel-lucro/main/drizzle/0002_indices_desempenho.sql → cole → Run.
 - `drizzle/0003_alertas.sql` (estado dos alertas de WhatsApp).

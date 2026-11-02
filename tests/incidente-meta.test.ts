@@ -58,9 +58,15 @@ describe.skipIf(!process.env.DATABASE_URL)("incidente Meta (banco local)", () =>
     expect(c.erro).toMatch(/não configurada/); expect(c.falhasSeguidas).toBe(0);
     await db.execute(sql`delete from coletas where fonte = 'tiktok'`);
   });
-  it("verificação de esquema: banco local já tem a 0004 → nada pendente", async () => {
+  it("verificação de esquema: coluna da 0004 removida → o app recria sozinho e a coleta grava o orçamento", async () => {
     const { verificarEsquema } = await import("../src/db/esquema");
+    await db.execute(sql`alter table campanhas drop column if exists orcamento_diario`);
+    const antes = await db.execute(sql`select 1 from information_schema.columns where table_name = 'campanhas' and column_name = 'orcamento_diario'`) as unknown as unknown[];
+    expect(antes).toHaveLength(0);
     const r = await verificarEsquema(true);
-    expect(r.ok).toBe(true); expect(r.pendentes).toHaveLength(0);
+    expect(r.ok).toBe(true); expect(r.aplicados).toContain("coluna campanhas.orcamento_diario"); expect(r.pendentes).toHaveLength(0);
+    const depois = await db.execute(sql`select 1 from information_schema.columns where table_name = 'campanhas' and column_name = 'orcamento_diario'`) as unknown as unknown[];
+    expect(depois).toHaveLength(1);
+    expect((await verificarEsquema(true)).aplicados).toHaveLength(0); // segunda vez: nada a fazer
   });
 });

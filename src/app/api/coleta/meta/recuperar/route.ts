@@ -21,12 +21,13 @@ export async function GET(req: NextRequest) {
   const token = process.env.META_TOKEN;
   const contas = [process.env.META_ACT_00, process.env.META_ACT_01].filter(Boolean) as string[];
   if (!token || !contas.length) return NextResponse.json({ erro: "Meta não configurada (META_TOKEN / META_ACT_00 / META_ACT_01)" }, { status: 400 });
+  const esquema = await (await import("@/db/esquema")).verificarEsquema(true).catch((e) => ({ ok: false, aplicados: [], pendentes: [], erro: String(e) }));
   const r = await recuperarMeta(metaClienteReal(token), contas, de, ate);
   invalidarDados();
   const gravados = r.dias.reduce((s, d) => s + d.gravados, 0), erros = r.dias.filter((d) => d.erro);
   const continuar = r.proximo ? `${req.nextUrl.origin}/api/coleta/meta/recuperar?de=${r.proximo}&ate=${ate}` : null;
   return NextResponse.json({
     resumo: `${r.dias.length} dia×conta processados, ${gravados} lançamento(s) gravados/atualizados, ${erros.length} erro(s), ${r.chamadas} chamada(s) à Meta em ${Math.round(r.duracaoMs / 1000)} s.${continuar ? " NÃO TERMINOU: abra a URL em `continuar`." : " Concluído."}`,
-    continuar, dias: r.dias,
+    continuar, esquema, dias: r.dias,
   });
 }
