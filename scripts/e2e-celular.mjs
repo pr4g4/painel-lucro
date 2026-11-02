@@ -41,6 +41,7 @@ chk("barra Hoje não aparece na inicial", await (async () => { await p.goto("htt
 // atalhos de período: tocar em cada chip
 await p.goto("http://localhost:3000/"); await p.waitForLoadState("networkidle");
 for (const [rotulo, q, noMais] of [["Hoje", "p=hoje", false], ["Ontem", "p=ontem", false], ["7 dias", "p=7_dias", false], ["Últimas 6 h", "p=ultimas_6h", true], ["Últimas 24 h", "p=ultimas_24h", true], ["Mês atual", "p=mes_atual", true], ["Tudo (com histórico)", "p=tudo", true], ["Desde o marco zero", "p=marco_zero", true]]) {
+  await p.waitForSelector("body:not([data-carregando])", { timeout: 20000 }); // espera a troca anterior terminar (fichas ficam desabilitadas enquanto carrega)
   if (noMais) { await p.locator(".seletor-compacto .chips-linha button.chip").last().tap(); await p.waitForSelector(".popover", { timeout: 3000 }); }
   const el = p.locator(`button.chip:text-is("${rotulo}")`).first();
   await el.scrollIntoViewIfNeeded(); await el.tap(); await p.waitForTimeout(1200);
