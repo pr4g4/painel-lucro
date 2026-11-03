@@ -79,5 +79,6 @@ export async function processarAlertas(agora = new Date(), provedor: Provedor = 
 }
 
 export async function listarAlertas() {
-  try { return await executar((d) => d.select().from(schema.alertas).orderBy(desc(schema.alertas.abertoEm)).limit(30)); } catch { return null; }
+  const { lembrar } = await import("@/lib/memoria");
+  try { return await lembrar("alertas:lista", () => executar((d) => d.select().from(schema.alertas).orderBy(desc(schema.alertas.abertoEm)).limit(30), 6000, "alertas"), { ttlMs: 30_000, swr: true, rotulo: "alertas" }); } catch { return null; }
 }

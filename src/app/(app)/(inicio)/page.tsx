@@ -13,6 +13,7 @@ import { StatusLinha } from "@/components/status-linha";
 import { AreaAcumulado } from "@/components/area-acumulado";
 import { Vivo } from "@/components/vivo";
 import { Entretem } from "@/components/entretem";
+import { GuardarUltimoBom } from "@/components/ultimo-bom";
 import { FaixaAtraso } from "@/components/faixa-atraso";
 import { textoVariacao } from "@/components/metrica";
 import type { Params } from "@/lib/periodo-url";
@@ -22,9 +23,13 @@ export const dynamic = "force-dynamic";
 /** Página inicial: só o essencial. Tudo o mais fica em /detalhes (mesmos números). */
 export default async function Inicio({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = await searchParams;
+  // créditos e avisos não dependem do período: começam junto com o contexto (uma ida ao banco a menos quando a memória está fria)
+  const tzUrl = (Array.isArray(sp.tz) ? sp.tz[0] : sp.tz) === "America/Mexico_City" ? "America/Mexico_City" : "America/Sao_Paulo";
+  const pCreditos = carregarCreditos(new Date(), tzUrl).catch(() => null);
+  const pAvisos = avisosAbertos().catch(() => []);
   const ctx = await contextoPeriodo(sp);
   const { estado, atual, anterior, temBaseAnterior, coletas, taxaMxn } = ctx;
-  const [creditos, avisosAb] = await Promise.all([carregarCreditos(estado.agora, estado.tz).catch(() => null), avisosAbertos().catch(() => [])]);
+  const [creditos, avisosAb] = await Promise.all([pCreditos, pAvisos]);
   const t = atual.totais, a = anterior.totais;
   const money = (v: number | null | undefined) => fmtMoeda(v, estado.moeda, taxaMxn);
   const prefixo = estado.moeda === "MXN" ? "MX$ " : "R$ ";
@@ -43,7 +48,6 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
   const ultimaOk = ["meta", "cambio", "openai", "kie"].map((f) => coletas.get(f)?.ultimaOk?.getTime() ?? 0).reduce((m, x) => Math.max(m, x), 0);
   const cambio = coletas.get("cambio");
   const agendadorOk = !!cambio && estado.agora.getTime() - cambio.ultima.getTime() <= 15 * 60_000;
-  const chipsSaldo = creditos ? [creditos.kie, creditos.openai].flatMap((s) => { const m = alertaSaldo(s, creditos.limites); return m ? [{ nome: s.fonte === "kie" ? "kie.ai" : "OpenAI", texto: `${fmtUSD(s.saldoUsd)}${s.horasRestantes != null ? ` · ${fmtHorasRestantes(s.horasRestantes)}` : ""}`, motivo: m }] : []; }) : [];
   const bloco = (chave: string, rotulo: string, valor: number, ant: number, inverter = false, inteiro = false) => {
     const v = textoVariacao(valor, ant, temBaseAnterior, inteiro ? "int" : "moeda", estado.moeda, taxaMxn);
     const bom = v.bom == null ? null : inverter ? !v.bom : v.bom;
@@ -90,15 +94,20 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
 
         <AreaAcumulado pontos={acum.pontos.map((p) => ({ rotulo: p.rotulo, acumulado: emMoeda(p.acumulado), valor: emMoeda(p.valor) }))} rotuloFim={rotuloFim} gran={acum.gran} moeda={estado.moeda} />
 
-        {chipsSaldo.length > 0 && (
-          <div className="chips-saldo">
-            {chipsSaldo.map((c) => <a key={c.nome} href={`/detalhes?${query}#creditos`} className="chip-saldo" title={c.motivo}>⚠ {c.nome} {c.texto}</a>)}
+        {creditos && (
+          <div className="saldos-linha num">
+            {[creditos.kie, creditos.openai].map((s) => {
+              const baixo = !!alertaSaldo(s, creditos.limites);
+              const nome = s.fonte === "kie" ? "kie.ai" : "OpenAI";
+              return <a key={s.fonte} href={`/detalhes?${query}#creditos`} className={`saldo-item ${baixo ? "saldo-baixo" : ""}`} title={s.indisponivel ?? (s.estimado ? "estimado" : "")}>{baixo ? "⚠ " : ""}{nome} {s.indisponivel ? "—" : fmtUSD(s.saldoUsd)}{s.horasRestantes != null ? <span className="text-ink-3"> · {fmtHorasRestantes(s.horasRestantes)}</span> : null}</a>;
+            })}
           </div>
         )}
 
         <a href={`/detalhes?${query}`} className="ver-detalhes">Ver detalhes <span aria-hidden>→</span></a>
       </div>
 
+      <GuardarUltimoBom quando={formatInTimeZone(estado.agora, estado.tz, "dd/MM HH:mm")} periodo={ctx.propsSeletor.rotuloPeriodo} lucro={t.lucroLiquido} lucroTexto={money(t.lucroLiquido)} itens={[{ k: "receita", v: money(t.receitaLiquida) }, { k: "anúncios", v: money(t.anunciosComImposto) }, { k: "IA", v: money(t.ia) }, { k: "vendas", v: String(t.numVendas) }]} />
       <Vivo inicial={{ vendas: hoje.totais.numVendas, lucro: hoje.totais.lucroLiquido, ultimaMxn: null, dia: diaBrasilia(estado.agora) }} />
     </div>
   );

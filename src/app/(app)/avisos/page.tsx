@@ -13,7 +13,8 @@ const TZ = process.env.APP_TZ ?? "America/Sao_Paulo";
 
 export default async function Avisos() {
   const s = await exigirSessao();
-  const [avisos, coletas] = await Promise.all([executar((d) => d.select().from(schema.avisos).orderBy(desc(schema.avisos.criadoEm)).limit(200), 15000, "avisos"), ultimasColetas()]);
+  const { lembrar } = await import("@/lib/memoria");
+  const [avisos, coletas] = await Promise.all([lembrar("avisos:lista", () => executar((d) => d.select().from(schema.avisos).orderBy(desc(schema.avisos.criadoEm)).limit(200), 6000, "avisos"), { ttlMs: 30_000, swr: true, rotulo: "avisos" }), ultimasColetas()]);
   const abertos = avisos.filter((a) => !a.resolvidoEm);
   const agora = Date.now();
   const prov = provedorAtual();

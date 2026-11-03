@@ -1,9 +1,9 @@
 // Gera os prints de documentação em docs/prints (desktop e celular, claro e escuro): Painel, DRE e Campanhas.
 import { chromium, devices } from "playwright";
 const OUT = process.argv[2] ?? "docs/prints";
-const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--no-sandbox"] });
+const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1243/chrome-linux64/chrome", args: ["--no-sandbox"] });
 const telas = [["desktop", { viewport: { width: 1360, height: 900 } }], ["celular", devices["iPhone 13"]]];
-const paginas = [["inicial", "/?p=hoje", ".hero-ini .hero-v"], ["detalhes", "/detalhes?p=hoje", ".hero"], ["dre", "/dre?p=hoje", "h1:has-text(\"DRE do período\")"], ["campanhas", "/campanhas?p=hoje", "h1:has-text(\"Campanhas\")"]];
+const paginas = [["inicial", "/?p=hoje", ".hero-ini .hero-v"], ["detalhes", "/detalhes?p=hoje", ".hero"], ["dre", "/dre?p=hoje", "h1:has-text(\"DRE do período\")"], ["campanhas", "/campanhas?p=hoje", "h1:has-text(\"Gerenciador de Ads\")"]];
 for (const [tela, opts] of telas) for (const tema of ["claro", "escuro"]) {
   const c = await b.newContext({ ...opts, locale: "pt-BR" }); const p = await c.newPage();
   await p.goto("http://localhost:3000/login"); await p.waitForLoadState("networkidle"); await p.waitForTimeout(600);

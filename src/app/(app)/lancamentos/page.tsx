@@ -46,7 +46,7 @@ export default async function Lancamentos({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
+      <Suspense fallback={<div className="skeleton h-12" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Lançamentos <span className="text-xs text-ink-3 font-normal">tudo que o app leu, com fonte e data/hora · {linhas.length} linhas</span></h1>
       <form className="flex flex-wrap gap-2 text-sm items-end">
         {Object.entries(sp).filter(([k]) => !["fonte", "q"].includes(k)).map(([k, v]) => <input key={k} type="hidden" name={k} value={String(v)} />)}

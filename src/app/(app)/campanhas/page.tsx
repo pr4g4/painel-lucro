@@ -1,5 +1,5 @@
 import { contextoPeriodo } from "@/lib/contexto";
-import { carregarLancamentos, carregarParametros } from "@/lib/dados";
+import { carregarLancamentosCache, carregarParametrosCache } from "@/lib/dados";
 import { anuncioComImposto } from "@/lib/calculo";
 import { schema, executar } from "@/db";
 import { Suspense } from "react";
@@ -15,13 +15,19 @@ export default async function Campanhas({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const ctx = await contextoPeriodo(sp);
   const { estado, taxaMxn } = ctx;
-  const ultimaMeta = await executar((d) => d.select().from(schema.coletas).where(eq(schema.coletas.fonte, "meta")).orderBy(desc(schema.coletas.iniciadaEm)).limit(1), 10000, "última coleta Meta").then((r) => r[0]).catch(() => undefined);
-  const [lanc, params, camps] = await Promise.all([carregarLancamentos(estado.periodo), carregarParametros(),
-    executar((d) => d.select({ c: schema.campanhas, frente: schema.frentes.nome }).from(schema.campanhas).leftJoin(schema.frentes, eq(schema.frentes.id, schema.campanhas.frenteId)), 15000, "campanhas")]);
-  // entrega (impressões e cliques) vem do payload da Meta; só para CTR, CPC e CPM
-  const entrega = await executar((d) => d.execute(sql`select conta_id, campanha_id, coalesce(sum((payload->>'impressions')::numeric), 0)::float as impressoes, coalesce(sum((payload->>'clicks')::numeric), 0)::float as cliques
-    from lancamentos where fonte in ('meta', 'tiktok') and tipo = 'gasto_anuncio' and instante >= ${estado.periodo.inicio} and instante < ${estado.periodo.fim} ${estado.incluirHistorico ? sql`` : sql`and historico = false`} group by 1, 2`), 15000, "entrega")
-    .then((r) => new Map((r as unknown as { conta_id: string; campanha_id: string; impressoes: number; cliques: number }[]).map((x) => [`${x.conta_id}|${x.campanha_id}`, { impressoes: x.impressoes, cliques: x.cliques }]))).catch(() => new Map<string, { impressoes: number; cliques: number }>());
+  const { lembrar } = await import("@/lib/memoria");
+  const { janelaCache } = await import("@/lib/dados");
+  const jan = janelaCache(estado.periodo); const chaveJan = `${jan.inicio.toISOString()}:${jan.fim.toISOString()}`;
+  // entrega (impressões e cliques) vem do payload da Meta, só para CTR, CPC e CPM. Tudo em paralelo: uma ida ao banco em vez de duas.
+  const [ultimaMeta, lanc, params, camps, entrega] = await Promise.all([
+    lembrar("campanhas:ultimaMeta", () => executar((d) => d.select().from(schema.coletas).where(eq(schema.coletas.fonte, "meta")).orderBy(desc(schema.coletas.iniciadaEm)).limit(1), 6000, "última coleta Meta").then((r) => r[0]), { ttlMs: 60_000, swr: true, rotulo: "última coleta Meta" }).catch(() => undefined),
+    carregarLancamentosCache(jan),
+    carregarParametrosCache(),
+    lembrar("campanhas:lista", () => executar((d) => d.select({ c: schema.campanhas, frente: schema.frentes.nome }).from(schema.campanhas).leftJoin(schema.frentes, eq(schema.frentes.id, schema.campanhas.frenteId)), 6000, "campanhas"), { ttlMs: 60_000, swr: true, rotulo: "campanhas" }),
+    lembrar(`campanhas:entrega:${chaveJan}:${estado.incluirHistorico}`, () => executar((d) => d.execute(sql`select conta_id, campanha_id, coalesce(sum((payload->>'impressions')::numeric), 0)::float as impressoes, coalesce(sum((payload->>'clicks')::numeric), 0)::float as cliques
+    from lancamentos where fonte in ('meta', 'tiktok') and tipo = 'gasto_anuncio' and instante >= ${estado.periodo.inicio.toISOString()} and instante < ${estado.periodo.fim.toISOString()} ${estado.incluirHistorico ? sql`` : sql`and historico = false`} group by 1, 2`), 15000, "entrega")
+    .then((r) => new Map((r as unknown as { conta_id: string; campanha_id: string; impressoes: number; cliques: number }[]).map((x) => [`${x.conta_id}|${x.campanha_id}`, { impressoes: x.impressoes, cliques: x.cliques }]))), { ttlMs: 60_000, swr: true, rotulo: "entrega" }).catch(() => new Map<string, { impressoes: number; cliques: number }>()),
+  ]);
   const vendasAprovadas = ctx.atual.totais.numVendas;
   const gasto = new Map<string, number>();
   for (const l of lanc) {
@@ -34,7 +40,7 @@ export default async function Campanhas({ searchParams }: { searchParams: Promis
   const total = linhas.reduce((s, l) => s + l.gasto, 0);
   return (
     <>
-      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
+      <Suspense fallback={<div className="skeleton h-12" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Gerenciador de Ads <span className="text-xs text-ink-3 font-normal">gasto com imposto no período · total {fmtMoeda(total, estado.moeda, taxaMxn)}{totImp ? ` · ${fmtNum(totImp, 0)} impressões · CTR ${fmtPctSimples(totCli / totImp, 2)} · CPC ${fmtMoeda(total / Math.max(1, totCli), estado.moeda, taxaMxn)} · CPM ${fmtMoeda(total / totImp * 1000, estado.moeda, taxaMxn)}` : ""} · CPA geral {vendasAprovadas ? fmtMoeda(total / vendasAprovadas, estado.moeda, taxaMxn) : "—"}</span></h1>
       <p className="text-xs text-ink-3">Receita, lucro e ROAS por campanha não existem: a Zenith não diz de qual campanha veio a venda. O CPA geral usa as vendas aprovadas do período inteiro.</p>
       {ultimaMeta && (

@@ -1,6 +1,6 @@
 import { chromium, devices } from "playwright";
 const OUT = "/tmp/claude-0/-home-user-painel-lucro/a6a5e0bb-c97e-5f26-b5a7-06b735ce900b/scratchpad/shots";
-const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--no-sandbox"] });
+const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1243/chrome-linux64/chrome", args: ["--no-sandbox"] });
 const c = await b.newContext({ ...devices["iPhone 13"] }); const p = await c.newPage();
 await p.goto("http://localhost:3000/login"); await p.waitForLoadState("networkidle"); await p.waitForTimeout(800);
 await p.evaluate(() => { localStorage.setItem("tema", "dark"); });

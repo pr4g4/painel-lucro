@@ -1,5 +1,5 @@
 import { chromium, devices } from "playwright";
-const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--no-sandbox"] });
+const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1243/chrome-linux64/chrome", args: ["--no-sandbox"] });
 const ctx = await b.newContext({ ...devices["iPhone 13"], locale: "pt-BR" });
 const p = await ctx.newPage();
 const erros = [];

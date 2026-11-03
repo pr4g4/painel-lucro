@@ -16,7 +16,7 @@ if (!url) throw new Error("DATABASE_URL não definida");
  *   deixamos o antigo fechar sozinho e repetimos a consulta uma vez num cliente novo.
  */
 function criarSql() {
-  return postgres(url!, { max: 3, prepare: false, idle_timeout: 20, connect_timeout: 15, onnotice: () => {} });
+  return postgres(url!, { max: 6, prepare: false, idle_timeout: 20, connect_timeout: 8, onnotice: () => {} }); // 6: uma página abre várias consultas em paralelo; com 3 elas entravam em fila
 }
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -49,6 +49,7 @@ export function erroDeConexao(e: unknown): boolean {
 }
 
 export const PRAZO_PADRAO_MS = 15_000;
+const LATENCIA_SIMULADA = Number(process.env.SIMULAR_LATENCIA_DB_MS ?? 0) || 0; // medição local: imita a ida e volta até o banco remoto
 
 /**
  * Roda uma consulta com prazo (padrão 15 s). Se estourar o prazo ou falhar por conexão morta, recicla o cliente e repete
@@ -59,6 +60,7 @@ export async function executar<T>(fn: (db: Db) => Promise<T>, prazoMs = PRAZO_PA
     let timer: ReturnType<typeof setTimeout> | undefined;
     const t0 = Date.now();
     try {
+      if (LATENCIA_SIMULADA) { console.log(`[db] consulta: ${rotulo}`); await new Promise((r) => setTimeout(r, LATENCIA_SIMULADA)); } // só em medição local
       return await Promise.race([
         fn(atual().db),
         new Promise<T>((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error(`${rotulo}: tempo esgotado (${prazoMs / 1000} s)`), { code: "QUERY_TIMEOUT" })), prazoMs); }),

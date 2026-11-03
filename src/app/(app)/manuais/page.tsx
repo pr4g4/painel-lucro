@@ -29,7 +29,7 @@ export default async function Manuais({ searchParams }: { searchParams: Promise<
 
   return (
     <>
-      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
+      <Suspense fallback={<div className="skeleton h-12" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Lançamentos manuais <span className="text-xs text-ink-3 font-normal">saídas e entradas, únicas ou recorrentes · saldo no período {fmtMoeda(total, estado.moeda, taxaMxn)}</span></h1>
       {edita && (
         <FormGravar acao={salvarManual} className="card p-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-sm" botao={editarRow ? "Salvar alteração" : "Adicionar"} extra={editarRow ? <a href="/manuais" className="btn">Cancelar</a> : null}>

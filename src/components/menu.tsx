@@ -14,7 +14,7 @@ export const GRUPOS: Grupo[] = [
 const AVISOS: [string, string] = ["/avisos", "Avisos"];
 const PARAMETROS: [string, string] = ["/parametros", "Parâmetros"];
 
-export function Menu({ nome, papel, avisos, sair }: { nome: string; papel: string; avisos: number; sair: () => Promise<void> }) {
+export function Menu({ nome, papel, avisosSlot, sair }: { nome: string; papel: string; avisosSlot?: React.ReactNode; sair: () => Promise<void> }) {
   const pathname = usePathname();
   const [aberto, setAberto] = useState<string | null>(null); // grupo aberto (desktop popover / celular folha)
   const ref = useRef<HTMLDivElement>(null);
@@ -42,7 +42,7 @@ export function Menu({ nome, papel, avisos, sair }: { nome: string; papel: strin
                 {aberto === g.rotulo && <div className="nav-pop">{g.itens.map(item)}</div>}
               </div>
             ))}
-            <Link href={AVISOS[0]} prefetch={false} className={`nav-item ${pathname === AVISOS[0] ? "nav-ativo" : ""}`}>Avisos{avisos > 0 && <span className="badge">{avisos}</span>}</Link>
+            <Link href={AVISOS[0]} prefetch={false} className={`nav-item ${pathname === AVISOS[0] ? "nav-ativo" : ""}`}>Avisos{avisosSlot}</Link>
             <Link href={PARAMETROS[0]} prefetch={false} className={`nav-item ${pathname === PARAMETROS[0] ? "nav-ativo" : ""}`} title="Parâmetros" aria-label="Parâmetros">⚙</Link>
           </nav>
           <span className="text-xs text-ink-3 hidden xl:inline whitespace-nowrap">{nome} · {papel === "edita" ? "edita" : "só vê"}</span>
@@ -63,7 +63,7 @@ export function Menu({ nome, papel, avisos, sair }: { nome: string; papel: strin
           )
         ))}
         <button type="button" className={`bi-item ${aberto === "mais" ? "nav-ativo" : ""}`} onClick={() => setAberto(aberto === "mais" ? null : "mais")}>
-          <span className="bi-icone">☰{avisos > 0 && <span className="badge">{avisos}</span>}</span><span>Mais</span>
+          <span className="bi-icone">☰{avisosSlot}</span><span>Mais</span>
         </button>
       </nav>
       {aberto && (

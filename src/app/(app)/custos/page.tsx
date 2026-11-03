@@ -23,7 +23,7 @@ export default async function Custos({ searchParams }: { searchParams: Promise<P
   const total = t.custosTotais;
   return (
     <>
-      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
+      <Suspense fallback={<div className="skeleton h-12" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Custos por tipo <span className="text-xs text-ink-3 font-normal">total {fmtMoeda(total, estado.moeda, taxaMxn)} no período</span></h1>
       <div className="card overflow-x-auto">
         <table className="tab">

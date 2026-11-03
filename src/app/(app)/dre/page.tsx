@@ -22,7 +22,7 @@ export default async function PaginaDRE({ searchParams }: { searchParams: Promis
   const incompleto = periodoTocaHoje && atrasos.some((a) => a.fonte === "meta" || a.fonte === "tiktok" || a.fonte === "zenith");
   return (
     <>
-      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
+      <Suspense fallback={<div className="skeleton h-12" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       {ctx.problemas.length > 0 && <div className="card p-2 text-xs text-warn border-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
       {periodoTocaHoje && <FaixaAtraso atrasos={atrasos} tz={estado.tz} />}
       <h1 className="font-semibold">DRE do período <span className="text-xs text-ink-3 font-normal">lucro líquido {fmtMoeda(atual.totais.lucroLiquido, estado.moeda, taxaMxn)} · igual ao cartão do painel</span>{incompleto && <span className="bh-incompleto">incompleto</span>}</h1>

@@ -18,7 +18,7 @@ export default async function VendaManual({ searchParams }: { searchParams: Prom
   const vendas = await executar((d) => d.select().from(schema.vendas).where(eq(schema.vendas.fonte, "manual")).orderBy(desc(schema.vendas.aprovadaEm)).limit(200), 15000, "vendas manuais");
   return (
     <>
-      <Suspense fallback={<div className="card p-3 h-24 animate-pulse" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
+      <Suspense fallback={<div className="skeleton h-12" />}><SeletorPeriodo {...ctx.propsSeletor} /></Suspense>
       <h1 className="font-semibold">Venda manual <span className="text-xs text-ink-3 font-normal">para venda avulsa (SPEI sem cliente) que não aparece na Zenith · origem gravada como “manual”</span></h1>
       {edita && (
         <FormGravar acao={salvarVendaManual} className="card p-3 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 text-sm" botao="Registrar venda">

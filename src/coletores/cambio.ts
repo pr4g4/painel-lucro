@@ -127,8 +127,11 @@ export const ROTULO_FONTE_CAMBIO: Record<string, string> = { ptax: "PTAX", ecb_u
 
 /** Última taxa MXN gravada: dia e fonte (para o selo do painel). */
 export async function ultimaTaxaMxnInfo(): Promise<{ dia: string; fonte: string; taxa: number } | null> {
-  const [r] = await db.select().from(schema.cambio).where(eq(schema.cambio.par, "MXNBRL")).orderBy(desc(schema.cambio.dia)).limit(1);
-  return r ? { dia: r.dia, fonte: r.fonte, taxa: Number(r.taxa) } : null;
+  const { lembrar } = await import("@/lib/memoria"); const { executar } = await import("@/db");
+  return lembrar("cambio:ultimaMxn", async () => {
+    const [r] = await executar((d) => d.select().from(schema.cambio).where(eq(schema.cambio.par, "MXNBRL")).orderBy(desc(schema.cambio.dia)).limit(1), 6000, "última taxa MXN");
+    return r ? { dia: r.dia, fonte: r.fonte, taxa: Number(r.taxa) } : null;
+  }, { ttlMs: 300_000, swr: true, rotulo: "última taxa MXN" });
 }
 
 export const _sql = sql;

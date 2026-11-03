@@ -93,3 +93,33 @@ Alternativa pela API do ZapData: `WHATSAPP_PROVEDOR=zapdata`, `ZAPDATA_ALERTA_UR
 - O que mudou: (1) o gasto é gravado ANTES dos metadados das campanhas, e falha de metadado vira aviso separado, nunca derruba a coleta; (2) toda coleta começa checando o esquema e aplica sozinha os comandos idempotentes das migrações; se o banco não deixar, abre aviso "migracao_pendente" e faixa vermelha em todas as páginas; (3) a faixa de fonte parada mostra data e "há N dias" quando não for hoje; (4) fonte não configurada não conta falha nem alerta; (5) rota de recuperação `/api/coleta/meta/recuperar?de=AAAA-MM-DD&ate=AAAA-MM-DD` (logado como editor), dia a dia, idempotente, que continua pela URL devolvida em `continuar`.
 - Regra para mim: todo deploy com migração nova termina a resposta com "PRECISA DO ERICK: rodar migração X" em destaque.
 - Frente "Daniela Cruz" (regra `Dani\s*Cruz|Daniela`, ordem 0) é criada sozinha na próxima coleta e as campanhas já gravadas são reatribuídas.
+
+## Fluidez (03/11) — por que o painel demorava 9–16 s e o que mudou
+
+**Gargalo real (medido localmente com 1 s de ida e volta ao banco por consulta, imitando o Supabase lento):**
+- o layout esperava duas consultas em série (avisos e barra "Hoje") antes de mandar o primeiro byte: nada aparecia até o banco responder;
+- as páginas faziam consultas diretas sem cache, com prazos de 8–15 s: cada abertura refazia tudo, e um banco lento virava 9–16 s de tela em branco;
+- no /campanhas a consulta de impressões/cliques falhava sempre (data passada crua ao SQL) e era repetida a cada abertura;
+- a inicial fazia três idas em série (contexto → créditos/avisos).
+
+**O que mudou (sem mexer em fórmulas, números, rotas, coleta ou login):**
+- casca (menu + faixa Hoje) sai sem banco; avisos e faixa entram por streaming (Suspense);
+- toda leitura de tela passa pela memória com "stale-while-revalidate": devolve o último valor bom na hora e atualiza por trás (30–60 s); erro ou vazio nunca apaga o valor bom;
+- prazo das consultas de tela caiu para 6 s; passou disso, mostra o último valor bom;
+- créditos, avisos e contexto da inicial carregam em paralelo; /campanhas usa os mesmos caches do cálculo;
+- esqueletos com brilho, bonecos de palito brigando após 3 s de espera (com frases), erro re-tenta 2 vezes sozinho e mostra o último dado salvo + "Tentar de novo";
+- pré-carrega as outras páginas quando o navegador está ocioso.
+
+**Medições locais (iPhone 13 emulado, 1 s por consulta; "frio" = servidor recém-ligado, "quente" = memória cheia), em ms:**
+
+| rota | antes casca | antes números | depois casca (frio) | depois números (frio) | depois números (quente) |
+|---|---|---|---|---|---|
+| / | 1146 | 1171 | 123 | 1442 | 482 |
+| /dre | 2126 | 2147 | 175 | 1484 | 435 |
+| /avisos | 2093 | 2113 | 158 | 2473 | 106 |
+| /campanhas | 2122 | 3434 | 164 | 2486 | 197 |
+| /detalhes | 2171 | 2378 | 142 | 3481 | 204 |
+
+"Antes" era quase igual frio ou quente (nada tinha cache). Em produção cada ida ao banco costuma ser bem menor que 1 s, então os tempos reais devem ficar abaixo disso; o /detalhes frio ainda faz três idas em série (contexto → créditos/câmbio/48 h) e é a página "sob demanda".
+
+Como medir de novo: `SIMULAR_LATENCIA_DB_MS=1000 npm start` e `node scripts/medir.mjs` (ou `ROTAS=/,/dre node scripts/medir.mjs`).

@@ -23,6 +23,10 @@ export type DadosHoje = {
 };
 
 export async function dadosHoje(tz = process.env.APP_TZ ?? "America/Sao_Paulo"): Promise<DadosHoje> {
+  const { lembrar } = await import("@/lib/memoria");
+  return lembrar(`hoje:${tz}`, () => dadosHojeBruto(tz), { ttlMs: 30_000, swr: true, rotulo: "barra Hoje" });
+}
+async function dadosHojeBruto(tz: string): Promise<DadosHoje> {
   const agora = new Date();
   const problemas: string[] = [];
   const marcoPadrao = new Date("2026-10-03T03:00:00Z");

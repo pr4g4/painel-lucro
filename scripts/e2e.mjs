@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 const OUT = "/tmp/claude-0/-home-user-painel-lucro/a6a5e0bb-c97e-5f26-b5a7-06b735ce900b/scratchpad/shots";
-const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--no-sandbox"] });
+const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1243/chrome-linux64/chrome", args: ["--no-sandbox"] });
 const erros = [];
 const ctx = await b.newContext({ viewport: { width: 1360, height: 900 } });
 const p = await ctx.newPage();
@@ -39,7 +39,7 @@ for (const rota of ["detalhes", "pedidos", "campanhas", "manuais", "venda-manual
   await p.screenshot({ path: `${OUT}/${rota}.png`, fullPage: rota !== "lancamentos" });
 }
 // cria lançamento manual e confere que aparece no painel sem coleta
-await p.goto("http://localhost:3000/manuais?p=hoje"); await p.waitForLoadState("networkidle");
+await p.goto("http://localhost:3000/manuais?p=hoje"); await p.waitForLoadState("networkidle"); await p.waitForTimeout(400); // deixa o React hidratar o formulário
 await p.fill("input[name=valor]", "37,50"); await p.fill("input[name=descricao]", "TESTE e2e avulso"); await p.click("button:has-text('Adicionar')");
 await p.waitForSelector("text=TESTE e2e avulso"); console.log("manual criado ok");
 await p.goto("http://localhost:3000/lancamentos?p=hoje&fonte=manual"); console.log("no ledger:", await p.locator("text=TESTE e2e avulso").count());
