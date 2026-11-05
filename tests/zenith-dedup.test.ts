@@ -83,4 +83,41 @@ describe.skipIf(!process.env.DATABASE_URL)("mesmo pagamento por eventos diferent
     expect(r.resultado).toMatch(/já registrada/);
     expect((await vendasAtivas()).length).toBe(1);
   });
+  it("05/11: 'Entrada avulsa' de outro cliente, mesmo valor nos mesmos minutos, NÃO é engolida (um depósito por pagamento; pagador diferente)", async () => {
+    const { criarVendaDoEvento } = await import("../src/coletores/zenith-aplicar");
+    const antes = (await vendasAtivas()).length;
+    // par legítimo: depósito + pagamento do mesmo cliente, 30 s de diferença → UMA venda
+    const d1 = await enviar("n1", "deposit.credited", { id: "dep-A", amount: 8000, currency: "MXN", paymentMethod: "spei", creditedAt: "2026-11-05T03:05:00Z", payer: { name: "ANA LÓPEZ" } });
+    expect(d1.resultado).toMatch(/criada/);
+    const p1 = await enviar("n2", "payment.captured", { id: "pay-A", amount: 8000, currency: "MXN", capturedAt: "2026-11-05T03:05:30Z", customer: { name: "Ana Lopez" } });
+    expect(p1.resultado).toMatch(/já registrada como dep-A.*família diferente/);
+    expect((await vendasAtivas()).length).toBe(antes + 1);
+    // segundo depósito de MX$ 80, 8 min depois, de OUTRO pagador: dep-A já absorveu seu pagamento e o nome é diferente → venda nova
+    const d2 = await enviar("n3", "deposit.credited", { id: "dep-F", amount: 8000, currency: "MXN", paymentMethod: "spei", creditedAt: "2026-11-05T03:13:00Z", payer: { name: "FERNANDO SALAZAR BRAVO" } });
+    expect(d2.resultado).toMatch(/criada/);
+    expect((await vendasAtivas()).length).toBe(antes + 2);
+    // pagamento de MX$ 80 de um terceiro cliente, sem nome, 2 min depois: dep-F ainda não absorveu pagamento → mescla (comportamento antigo, par provável)
+    const p2 = await enviar("n4", "payment.captured", { id: "pay-X", amount: 8000, currency: "MXN", capturedAt: "2026-11-05T03:15:00Z" });
+    expect(p2.resultado).toMatch(/já registrada como dep-F/);
+    // mas um pagamento com nome diferente dos dois não mescla com nenhum
+    const p3 = await enviar("n5", "payment.captured", { id: "pay-Z", amount: 8000, currency: "MXN", capturedAt: "2026-11-05T03:16:00Z", customer: { name: "Carlos Ruiz" } });
+    expect(p3.resultado).toMatch(/criada/);
+    expect((await vendasAtivas()).length).toBe(antes + 3);
+    // a varredura de duplicadas respeita as mesmas regras: não anula dep-F nem pay-Z
+    const lista = await varrer(new Date("2026-11-05T03:00:00Z"), false);
+    expect(lista.pares.map((x) => x.anulada)).not.toContain("dep-F");
+    expect(lista.pares.map((x) => x.anulada)).not.toContain("pay-Z");
+    // criar venda a partir de um evento mesclado: idempotente e sem mesclagem
+    const c1 = await criarVendaDoEvento("n4"); // pay-X foi mesclado em dep-F; criar separa
+    expect(c1.ok).toBe(true);
+    const c1b = await criarVendaDoEvento("n4");
+    expect(c1b.resultado).toMatch(/já existe venda pay-X/);
+    // reenvio do mesmo evento pelo webhook: duplicado por id de evento
+    const re = await enviar("n4", "payment.captured", { id: "pay-X", amount: 8000, currency: "MXN", capturedAt: "2026-11-05T03:15:00Z" });
+    expect(re.duplicado).toBe(true);
+    // reenvio com outro id de evento e o mesmo id de pagamento: liga à venda criada, não duplica
+    const re2 = await enviar("n6", "payment.captured", { id: "pay-X", amount: 8000, currency: "MXN", capturedAt: "2026-11-05T03:15:00Z" });
+    expect(re2.resultado).toMatch(/já registrada/);
+    expect(await criarVendaDoEvento("inexistente")).toMatchObject({ ok: false });
+  });
 });

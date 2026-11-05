@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { invalidarDados } from "@/lib/cache";
 import { exigirSessao } from "@/lib/auth/sessao";
+import { abrirAviso, resolverAvisos } from "@/coletores/base";
 import { lerCsvZenithAuto, importarVendasZenith, ehCsvExportZenith, lerCsvExportZenith, conciliarPorReferencia } from "@/coletores/zenith";
 
 export async function importarCsv(_prev: { ok?: boolean; mensagem?: string } | undefined, form: FormData): Promise<{ ok?: boolean; mensagem?: string }> {
@@ -15,6 +16,9 @@ export async function importarCsv(_prev: { ok?: boolean; mensagem?: string } | u
     const linhas = lerCsvExportZenith(texto);
     if (!linhas.length) return { ok: false, mensagem: "CSV de exportação sem linhas com referência." };
     const r = await conciliarPorReferencia(linhas);
+    // conferência contra perda: referência que a Zenith tem e o painel não vira aviso em /avisos até ser importada pelo CSV de Conciliação
+    if (r.naoEncontradas.length) await abrirAviso("vendas_faltando", "zenith", `${r.naoEncontradas.length} venda(s) da Zenith que o painel NÃO tem (CSV de exportação de ${new Date().toISOString().slice(0, 10)}): ${r.naoEncontradas.slice(0, 20).join(", ")}${r.naoEncontradas.length > 20 ? "…" : ""}. Importe o CSV de Conciliação do dia em /importar para lançá-las.`).catch(() => {});
+    else await resolverAvisos("zenith", "vendas_faltando").catch(() => {});
     revalidatePath("/"); invalidarDados(); revalidatePath("/dre"); revalidatePath("/lancamentos");
     const partes = [`${r.total} linha(s) do CSV de exportação da Zenith.`, `${r.atualizadas.length} status atualizado(s)${r.atualizadas.length ? `: ${r.atualizadas.slice(0, 10).join(", ")}${r.atualizadas.length > 10 ? "…" : ""}` : ""}.`, `${r.jaIguais} já estavam iguais.`];
     if (r.naoEncontradas.length) partes.push(`${r.naoEncontradas.length} referência(s) que o painel NÃO tem (webhook não entregou; importe o CSV de Conciliação, que traz data e taxas): ${r.naoEncontradas.slice(0, 20).join(", ")}${r.naoEncontradas.length > 20 ? "…" : ""}.`);

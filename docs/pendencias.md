@@ -123,3 +123,18 @@ Alternativa pela API do ZapData: `WHATSAPP_PROVEDOR=zapdata`, `ZAPDATA_ALERTA_UR
 "Antes" era quase igual frio ou quente (nada tinha cache). Em produção cada ida ao banco costuma ser bem menor que 1 s, então os tempos reais devem ficar abaixo disso; o /detalhes frio ainda faz três idas em série (contexto → créditos/câmbio/48 h) e é a página "sob demanda".
 
 Como medir de novo: `SIMULAR_LATENCIA_DB_MS=1000 npm start` e `node scripts/medir.mjs` (ou `ROTAS=/,/dre node scripts/medir.mjs`).
+
+## 05/11 — venda da Zenith faltando (FERNANDO SALAZAR BRAVO, MX$ 80, 00:13)
+
+**Causa mais provável (pelo código; não dá para ler os logs da Vercel daqui):** a regra que junta "deposit.credited" e "payment.captured" do mesmo pagamento (mesmo valor, mesma moeda, até 10 min, famílias diferentes) engoliu uma venda de outro cliente com o mesmo valor nos mesmos minutos. O evento chegou, foi gravado em `zenith_eventos` com o resultado "já registrada como … família diferente; não somou de novo", e por isso não há linha nova em /lancamentos nem pendente. A outra hipótese (webhook nem chegou, por timeout do banco ou 401) deixa rastro diferente: nenhum evento no horário, ou evento em vermelho/laranja.
+
+**Como confirmar em 1 minuto:** logado como Erick, abra `/api/zenith/eventos?dia=2026-11-05`. A página lista todos os eventos do dia (hora, valor, pagador quando a Zenith manda, o que o painel fez) e as vendas gravadas.
+- Evento roxo às 00:13 de MX$ 80 → é a mesclagem; clique **criar venda** na linha (não duplica: se o webhook reenviar, cai na mesma dedup por id).
+- Nenhum evento às 00:13 → o webhook não entregou; importe o CSV de Conciliação do dia (Zenith → Vendas → Conciliação em CSV) em /importar.
+
+**O que mudou para não repetir:**
+- Um depósito por pagamento: a venda que já absorveu um evento da outra família não absorve outro.
+- Pagador conferido: se os dois eventos trazem nome/e-mail e são diferentes, não mescla (o nome fica guardado na venda, coluna "pagador" da conferência).
+- Com várias vendas de mesmo valor no mesmo minuto, o par escolhido é o mais próximo no tempo.
+- A varredura de duplicadas (`/api/zenith/reprocessar?dedup=1`) segue as mesmas regras.
+- Conferência contra perda: o CSV "Exportar" da Zenith em /importar abre o aviso **vendas_faltando** em /avisos com as referências que o painel não tem (fecha sozinho quando zerar). A Zenith não tem API de listagem, então essa conferência não roda sozinha a cada coleta: é o CSV do dia (1 minuto) ou a página de conferência acima.

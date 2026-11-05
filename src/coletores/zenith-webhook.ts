@@ -124,13 +124,32 @@ export function interpretarEvento(ev: EventoZenith, tipoHeader: string | null, t
   const produto = typeof produtoRaw === "string" && produtoRaw.trim() ? produtoRaw.trim() : null;
   const metodo = String(g(d, "paymentMethod", "method") ?? (tipo === "deposit.credited" ? "spei" : ""));
   const familia = tipo === "deposit.credited" ? "deposito" : "pagamento";
-  const base = { id: identidade, moeda: moeda as "MXN" | "BRL", bruto, produto, ids: candidatos, payload: { eventoId: eventId, tipo, familia, metodo, data: d } };
+  const pagador = pagadorDe(d);
+  const base = { id: identidade, moeda: moeda as "MXN" | "BRL", bruto, produto, ids: candidatos, payload: { eventoId: eventId, tipo, familia, metodo, pagador, data: d } };
   if ((TIPOS_APROVACAO as readonly string[]).includes(tipo)) {
     return { ok: true, identidade, descricao: `${tipo}${metodo ? ` (${metodo})` : ""}`, venda: { ...base, status: "aprovada", criadaEm: quando, aprovadaEm: quando } };
   }
   if (tipo === "payment.pending") return { ok: true, identidade, descricao: tipo, venda: { ...base, status: "pendente", criadaEm: quando, aprovadaEm: null } };
   const quandoReembolso = tsParaDate(g(d, "refundedAt", "refunded_at", "chargebackAt", "occurredAt") as string | number | undefined) ?? quando;
   return { ok: true, identidade, descricao: tipo, venda: { ...base, status: tipo === "payment.chargeback" ? "chargeback" : "reembolsada", criadaEm: null, aprovadaEm: null, reembolsadaEm: quandoReembolso } };
+}
+
+/** Quem pagou, se o payload disser (nome ou e-mail do pagador/cliente), normalizado para comparação; null se não houver. */
+export function pagadorDe(d: Record<string, unknown>): string | null {
+  const objs = [d, d.payer, d.customer, d.client, d.buyer, d.sender, d.account, d.holder].filter((o): o is Record<string, unknown> => !!o && typeof o === "object");
+  for (const o of objs) {
+    const v = g(o, "payerName", "payer_name", "customerName", "customer_name", "senderName", "sender_name", "holderName", "holder_name", "fullName", "full_name", "name", "nombre", "email");
+    if (typeof v === "string" && v.trim()) return normalizarPagador(v);
+  }
+  return null;
+}
+export function normalizarPagador(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9@ ]+/g, " ").replace(/\s+/g, " ").trim();
+}
+/** Dois pagadores conhecidos são compatíveis se iguais ou se um contém o outro (nome curto × nome completo). */
+export function pagadoresCompativeis(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return true;
+  return a === b || a.includes(b) || b.includes(a);
 }
 
 /** Varre o payload (até 3 níveis) e devolve todo valor de campo cujo nome termina em "id"/"Id"/"reference" (sem o id do cliente/CLABE). */

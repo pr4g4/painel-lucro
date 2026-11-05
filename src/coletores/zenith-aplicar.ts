@@ -18,11 +18,11 @@ export async function aplicarEvento(ev: EventoZenith, tipoHeader: string | null,
   let existente = await acharVendaZenith([r.identidade, ...(r.venda.ids ?? [])]);
   let viaHeuristica = false;
   if (!existente && nova.status === "aprovada") {
-    const familia = (r.venda.payload as { familia?: string })?.familia ?? null;
-    existente = await acharVendaPorHeuristica({ id: r.identidade, bruto: r.venda.bruto, moeda: r.venda.moeda, aprovadaEm: nova.aprovadaEm, familia, ids: r.venda.ids });
+    const { familia = null, pagador = null } = (r.venda.payload as { familia?: string; pagador?: string | null }) ?? {};
+    existente = await acharVendaPorHeuristica({ id: r.identidade, bruto: r.venda.bruto, moeda: r.venda.moeda, aprovadaEm: nova.aprovadaEm, familia, ids: r.venda.ids, pagador });
     viaHeuristica = !!existente;
   }
-  if (existente) await mesclarIds(existente.id, [r.identidade, ...(r.venda.ids ?? [])]);
+  if (existente) await mesclarIds(existente.id, [r.identidade, ...(r.venda.ids ?? [])], (r.venda.payload as { familia?: string; pagador?: string | null }) ?? {});
   let resultado: string;
   if (!existente) {
     if (nova.status === "reembolsada" || nova.status === "chargeback") {
@@ -78,3 +78,35 @@ export async function resumoCambio() {
 }
 
 export { db };
+
+/**
+ * Cria a venda a partir de um evento já guardado em zenith_eventos, SEM a mesclagem por valor/hora (uso: quando a conferência
+ * com a Zenith mostra que o evento era outra venda). Idempotente: se já existe venda com qualquer id do evento, não cria;
+ * se o webhook reenviar o evento depois, cai na mesma dedup por id.
+ */
+export async function criarVendaDoEvento(eventoId: string): Promise<{ ok: boolean; resultado: string }> {
+  const [e] = await executar((d) => d.select().from(schema.zenithEventos).where(eq(schema.zenithEventos.eventoId, eventoId)).limit(1), 10000, "evento");
+  if (!e) return { ok: false, resultado: "evento não encontrado" };
+  if (!e.assinaturaOk) return { ok: false, resultado: "evento rejeitado na assinatura; não pode virar venda" };
+  const pl = (e.payload ?? {}) as EventoZenith & { corpoBruto?: string };
+  const ev: EventoZenith = pl.corpoBruto && !pl.data ? (() => { try { return JSON.parse(pl.corpoBruto!); } catch { return pl; } })() : pl;
+  const r = interpretarEvento(ev, e.tipo, e.timestampZenith ? String(e.timestampZenith.getTime()) : null, eventoId);
+  if (!r.ok) return { ok: false, resultado: `evento não interpretável: ${r.motivo}` };
+  if (r.venda.status !== "aprovada" && r.venda.status !== "pendente") return { ok: false, resultado: `evento é ${r.venda.status}; só aprovação/pendência vira venda nova` };
+  const meusIds = [r.identidade, ...(r.venda.ids ?? [])];
+  const existente = await acharVendaZenith(meusIds);
+  if (existente && meusIds.includes(existente.idOrigem)) return { ok: true, resultado: `já existe venda ${existente.idOrigem} (${existente.status}) com esse id; nada criado` };
+  if (existente) {
+    // o evento tinha sido mesclado em outra venda: desfaz a ligação para que reenvios liguem à venda nova
+    const pl = (existente.payload ?? {}) as Record<string, unknown>;
+    const ids = (Array.isArray(pl.ids) ? (pl.ids as string[]) : []).filter((i) => !meusIds.includes(i));
+    const familia = (r.venda.payload as { familia?: string })?.familia;
+    const mesclas = (Array.isArray(pl.mesclas) ? (pl.mesclas as string[]) : []).filter((f) => f !== familia);
+    await executar((d) => d.update(schema.vendas).set({ payload: { ...pl, ids, mesclas } }).where(eq(schema.vendas.id, existente.id)));
+  }
+  const nova = await normalizarVenda(r.venda, "zenith");
+  nova.observacao = `criada a partir do evento ${eventoId} em ${new Date().toISOString()} (conferência com a Zenith); sem mesclagem por valor/hora`;
+  await executar((d) => d.insert(schema.vendas).values(nova));
+  await executar((d) => d.update(schema.zenithEventos).set({ processado: true, resultado: `${e.resultado ?? ""} | venda ${r.identidade} criada manualmente`.replace(/^ \| /, ""), vendaIdOrigem: r.identidade }).where(eq(schema.zenithEventos.id, e.id)));
+  return { ok: true, resultado: `venda ${r.identidade} criada: ${nova.status} ${nova.moeda} ${nova.brutoOriginal}` };
+}
