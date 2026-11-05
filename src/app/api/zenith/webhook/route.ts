@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { invalidarDados } from "@/lib/cache";
 import { eq } from "drizzle-orm";
 import { db, schema, executar } from "@/db";
@@ -61,6 +61,9 @@ export async function POST(req: NextRequest) {
   await executar((d) => d.update(schema.zenithEventos).set({ processado: !resultado.startsWith("erro"), resultado, vendaIdOrigem }).where(eq(schema.zenithEventos.id, linhaId)));
   await executar((d) => d.insert(schema.coletas).values({ fonte: "zenith", terminadaEm: new Date(), ok: !resultado.startsWith("erro"), registros: 1, detalhe: { eventoId, resultado } }));
   invalidarDados();
+  // venda nova invalida o cache compartilhado: aquece de novo por trás, para a próxima abertura da inicial não ir ao banco
+  const segredoCron = process.env.CRON_SECRET;
+  try { if (segredoCron) after(() => fetch(`${req.nextUrl.origin}/api/aquecer`, { headers: { authorization: `Bearer ${segredoCron}` }, cache: "no-store", signal: AbortSignal.timeout(25_000) }).catch(() => {})); } catch { /* fora de requisição (testes) */ }
   return NextResponse.json({ ok: true, resultado });
 }
 

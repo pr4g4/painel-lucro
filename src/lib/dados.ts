@@ -137,8 +137,10 @@ export async function ultimasColetas(): Promise<Map<string, EstadoColeta>> {
   return m;
 }
 
+const avisosCache = unstable_cache(async () => (await lembrar("avisos:abertos", () => executar((d) => d.select().from(schema.avisos).where(isNull(schema.avisos.resolvidoEm)).orderBy(desc(schema.avisos.criadoEm)).limit(100), PRAZO_PAGINA_MS, "avisos"), { ttlMs: 30_000, swr: true, rotulo: "avisos abertos" })).map((a) => ({ ...a, criadoEm: a.criadoEm.toISOString(), resolvidoEm: a.resolvidoEm?.toISOString() ?? null })), ["avisos-abertos"], { revalidate: 60, tags: [TAG_DADOS] });
+/** Avisos em aberto, com cache de 60 s compartilhado (Data Cache) + memória. */
 export async function avisosAbertos() {
-  return lembrar("avisos:abertos", () => executar((d) => d.select().from(schema.avisos).where(isNull(schema.avisos.resolvidoEm)).orderBy(desc(schema.avisos.criadoEm)).limit(100), PRAZO_PAGINA_MS, "avisos"), { ttlMs: 30_000, swr: true, rotulo: "avisos abertos" });
+  return (await avisosCache()).map((a) => ({ ...a, criadoEm: new Date(a.criadoEm), resolvidoEm: dataOuNull(a.resolvidoEm) }));
 }
 
 const DEZ_MIN = 600_000;

@@ -93,6 +93,9 @@ Desde 02/11 toda coleta começa conferindo o banco e aplica sozinha o que faltar
 - `/api/zenith/eventos?dia=AAAA-MM-DD` (logado como editor): eventos recebidos no dia, o que o painel fez com cada um, vendas gravadas e o botão **criar venda** para um evento que foi mesclado por engano. Sem evento no horário = webhook não chegou → CSV de Conciliação em /importar.
 - CSV "Exportar" em /importar: além de atualizar status, abre o aviso **vendas_faltando** com as referências que o painel não tem.
 
+## Inicial lenta na primeira abertura
+- A coleta (a cada 10 min) e o webhook da Zenith chamam `/api/aquecer` sozinhos; abra `/api/aquecer` logado para ver os tempos. Se os passos mostrarem erro, cole aqui.
+
 ## Se algo der errado
 - Site abre mas dá erro 500: quase sempre `DATABASE_URL` errada (senha ou `[YOUR-PASSWORD]` não trocado). Corrija em Settings → Environment Variables → Redeploy.
 - "Fonte X não configurada" em Avisos: falta a chave daquela fonte; normal até você colar.

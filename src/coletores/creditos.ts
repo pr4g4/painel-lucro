@@ -1,6 +1,7 @@
 /** Saldos das IAs: leitura do banco + avaliação de alertas (usado pelo painel e ao fim de cada ciclo de coleta). */
 import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { schema, executar } from "@/db";
+import { unstable_cache } from "next/cache";
 import { saldoKie, saldoOpenAI, alertaSaldo, numeroVigente, inicioDoDia, type LancamentoCalc, type SaldoIA, type Parametro } from "@/lib/calculo";
 import { abrirAviso, resolverAvisos } from "./base";
 
@@ -8,10 +9,16 @@ function paraCalc(l: typeof schema.lancamentos.$inferSelect): LancamentoCalc {
   return { id: l.id, fonte: l.fonte, tipo: l.tipo, instante: l.instante, granularidade: l.granularidade, descricao: l.descricao, valorBrl: Number(l.valorBrl), valorOriginal: Number(l.valorOriginal), moeda: l.moeda, contaId: l.contaId, campanhaId: l.campanhaId, modelo: l.modelo, frente: null, historico: l.historico, estimado: l.estimado };
 }
 
-export async function carregarCreditos(agora = new Date(), tz = "America/Sao_Paulo"): Promise<{ kie: SaldoIA; openai: SaldoIA; limites: { horas: number; usd: number } }> {
+type Creditos = { kie: SaldoIA; openai: SaldoIA; limites: { horas: number; usd: number } };
+/** Cache de 60 s compartilhado entre instâncias (Data Cache da Vercel, tag "dados") + memória: a inicial em instância fria não vai ao banco. */
+const creditosCache = unstable_cache(async (tz: string) => {
   const { lembrar } = await import("@/lib/memoria");
-  // janela de 1 min na chave: o cálculo depende de "agora", mas 60 s de atraso não mudam nada visível; o antigo é devolvido na hora e atualizado por trás
-  return lembrar(`creditos:${tz}:${Math.floor(agora.getTime() / 60_000)}`, () => carregarCreditosBruto(agora, tz), { ttlMs: 60_000, swr: true, rotulo: "créditos" });
+  const c = await lembrar(`creditos:${tz}`, () => carregarCreditosBruto(new Date(), tz), { ttlMs: 60_000, swr: true, rotulo: "créditos" });
+  return { ...c, kie: { ...c.kie, lidoEm: c.kie.lidoEm?.toISOString() ?? null }, openai: { ...c.openai, lidoEm: c.openai.lidoEm?.toISOString() ?? null } };
+}, ["creditos"], { revalidate: 60, tags: ["dados"] });
+export async function carregarCreditos(_agora = new Date(), tz = "America/Sao_Paulo"): Promise<Creditos> {
+  const c = await creditosCache(tz);
+  return { ...c, kie: { ...c.kie, lidoEm: c.kie.lidoEm ? new Date(c.kie.lidoEm) : null }, openai: { ...c.openai, lidoEm: c.openai.lidoEm ? new Date(c.openai.lidoEm) : null } };
 }
 async function carregarCreditosBruto(agora: Date, tz: string): Promise<{ kie: SaldoIA; openai: SaldoIA; limites: { horas: number; usd: number } }> {
   const desde = new Date(agora.getTime() - 7 * 86_400_000);

@@ -5,7 +5,7 @@
  * Chamadas por ciclo de 10 min (por conta): 1 insights de HOJE (dia inteiro, por hora). Fuso da conta fica em memória por 24 h;
  * lista de campanhas só 1× por hora; ONTEM é refeito 1× às 06h e 1× às 12h (Brasília) e logo após uma falha (a Meta ajusta gasto retroativamente).
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { executarColeta, upsertLancamentos, marcoZeroAtual, abrirAviso, resolverAvisos, type NovoLancamento } from "./base";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
@@ -21,8 +21,32 @@ export interface MetaCliente {
   /** Tenta hora; devolve { granularidade } informando o que a conta conseguiu entregar. */
   insights(contaId: string, deDia: string, ateDia: string): Promise<{ linhas: MetaLinha[]; granularidade: "hora" | "dia"; fusoConta: string }>;
   campanhas(contaId: string): Promise<{ id: string; name: string; effective_status: string; daily_budget?: string; moeda?: string }[]>;
+  /** Conjuntos de anúncios com orçamento próprio (campanha sem orçamento centralizado): o orçamento/dia da campanha é a soma deles. Opcional. */
+  conjuntos?(contaId: string): Promise<ConjuntoMeta[]>;
   /** Fuso da conta (1 chamada; o coletor guarda em memória por 24 h). Opcional: sem ele, insights() informa. */
   fuso?(contaId: string): Promise<string>;
+}
+export type ConjuntoMeta = { id: string; campaign_id: string; effective_status: string; daily_budget?: string; lifetime_budget?: string };
+
+/**
+ * Orçamento/dia por campanha (em centavos, como a Meta devolve): o da própria campanha (orçamento centralizado) ou, sem ele,
+ * a soma dos conjuntos ATIVOS; se nenhum ativo, a soma de todos os conjuntos não apagados (campanha pausada ainda mostra o configurado).
+ * 05/11: 81 de 89 campanhas sem orçamento/dia porque o orçamento fica nos conjuntos, não na campanha.
+ */
+export function orcamentoDasCampanhas<T extends { id: string; daily_budget?: string }>(camps: T[], conjuntos: ConjuntoMeta[]): T[] {
+  const soma = new Map<string, { ativos: number; todos: number }>();
+  for (const c of conjuntos) {
+    const v = Number(c.daily_budget ?? "");
+    if (!Number.isFinite(v) || v <= 0 || /DELETED|ARCHIVED/.test(c.effective_status ?? "")) continue;
+    const acc = soma.get(c.campaign_id) ?? { ativos: 0, todos: 0 };
+    acc.todos += v; if (c.effective_status === "ACTIVE") acc.ativos += v;
+    soma.set(c.campaign_id, acc);
+  }
+  return camps.map((c) => {
+    if (c.daily_budget != null && c.daily_budget !== "" && Number(c.daily_budget) > 0) return c;
+    const s = soma.get(c.id); const v = s ? (s.ativos || s.todos) : 0;
+    return v > 0 ? { ...c, daily_budget: String(v) } : c;
+  });
 }
 
 /** Mensagem em português para os erros comuns da Meta, com o que fazer. */
@@ -96,6 +120,10 @@ export function metaClienteReal(token: string): MetaCliente {
       const dia = await get<{ data: MetaLinha[]; paging?: { next?: string } }>(`${contaId}/insights`, base);
       return { linhas: await paginar(dia), granularidade: "dia", fusoConta: conta.timezone_name };
     },
+    async conjuntos(contaId) {
+      const r = await get<{ data: ConjuntoMeta[]; paging?: { next?: string } }>(`${contaId}/adsets`, { fields: "id,campaign_id,effective_status,daily_budget,lifetime_budget", limit: "500" });
+      return paginar(r);
+    },
     async campanhas(contaId) {
       const r = await get<{ data: { id: string; name: string; effective_status: string; daily_budget?: string }[]; paging?: { next?: string } }>(`${contaId}/campaigns`, { fields: "id,name,effective_status,daily_budget", limit: "500" });
       const moeda = await lembrar(`meta:moeda:${contaId}`, async () => (await get<{ currency: string }>(contaId, { fields: "currency" })).currency, { ttlMs: 24 * 3_600_000, rotulo: "moeda da conta Meta" });
@@ -156,7 +184,8 @@ export async function coletarMeta(cliente: MetaCliente, contas: string[], agora 
       if (plano.buscaCampanhas) {
         chamadas++;
         try {
-          const camps = await cliente.campanhas(contaId);
+          let camps = await cliente.campanhas(contaId);
+          if (cliente.conjuntos) { chamadas++; camps = orcamentoDasCampanhas(camps, await cliente.conjuntos(contaId)); }
           const erroMeta = await gravarCampanhas(contaId, camps, frentes);
           if (erroMeta) { errosMetadados.push(`${contaId}: ${erroMeta}`); (detalhe[contaId] as Record<string, unknown>).metadados = erroMeta; }
         } catch (e) { const msg = (e instanceof Error ? e.message : String(e)).slice(0, 300); errosMetadados.push(`${contaId}: ${msg}`); (detalhe[contaId] as Record<string, unknown>).metadados = msg; }
@@ -166,6 +195,11 @@ export async function coletarMeta(cliente: MetaCliente, contas: string[], agora 
         const msg = e instanceof Error ? e.message : String(e);
         errosPorConta.push(`${contaId}: ${msg}`); detalhe[contaId] = { erro: msg };
       }
+    }
+    // entrega (impressões/cliques) nos lançamentos de antes de 02/11, que foram gravados sem esses campos: refaz 2 dias por hora, do mais antigo
+    if (plano.buscaCampanhas && horasRetro == null) {
+      try { const r = await completarEntrega(cliente, contas, marco); if (r) { detalhe.entregaRefeita = r; chamadas += r.chamadas; } }
+      catch (e) { detalhe.entregaRefeita = { erro: e instanceof Error ? e.message : String(e) }; }
     }
     detalhe.chamadasMeta = chamadas;
     if (errosMetadados.length) await abrirAviso("metadados_campanhas", "meta", `Meta: gasto gravado, mas os dados das campanhas (nome/status/orçamento) não: ${errosMetadados.join(" | ")}`);
@@ -189,7 +223,7 @@ export function linhasParaLancamentos(linhas: MetaLinha[], granularidade: "hora"
     rows.push({
       fonte: "meta", tipo: "gasto_anuncio", chaveNatural: `meta|${contaId}|${l.campaign_id}|${instante.toISOString()}`,
       instante, granularidade, descricao: l.campaign_name, valorOriginal: String(spend), moeda: "BRL", valorBrl: String(spend), taxaCambio: "1",
-      contaId, campanhaId: l.campaign_id, historico: instante < marco, payload: l,
+      contaId, campanhaId: l.campaign_id, historico: instante < marco, payload: { ...l, impressions: l.impressions ?? "0", clicks: l.clicks ?? "0" }, // sempre com entrega (0 quando a Meta não manda), para a reposição saber que já passou aqui
     });
   }
   return rows;
@@ -252,3 +286,22 @@ function diaNoFuso(d: Date, tz: string): string {
 }
 
 export const _eq = { and, eq };
+
+/** Dias (fuso de Brasília) com lançamento da Meta por hora sem o campo impressions no payload — gravados antes de 02/11. */
+export async function diasSemEntrega(marco: Date, limite = 2): Promise<string[]> {
+  const r = await db.execute(sql`select distinct to_char(instante at time zone ${TZ_APP}, 'YYYY-MM-DD') as dia from lancamentos
+    where fonte = 'meta' and tipo = 'gasto_anuncio' and granularidade = 'hora' and instante >= ${marco.toISOString()} and not (payload ? 'impressions') order by 1 limit ${limite}`);
+  return (r as unknown as { dia: string }[]).map((x) => x.dia);
+}
+/** Repõe impressões/cliques dos dias antigos, 2 por ciclo horário (4 chamadas), sem passar de 15 s. Idempotente: a chave natural é a mesma. */
+export async function completarEntrega(cliente: MetaCliente, contas: string[], marco: Date) {
+  const dias = await diasSemEntrega(marco);
+  if (!dias.length) return null;
+  const feitos: { dia: string; gravados: number; erro?: string }[] = []; let chamadas = 0;
+  for (const dia of dias) {
+    const r = await recuperarMeta(cliente, contas, dia, dia, 15_000, 300);
+    chamadas += r.chamadas;
+    feitos.push({ dia, gravados: r.dias.reduce((t, x) => t + x.gravados, 0), erro: r.dias.find((x) => x.erro)?.erro });
+  }
+  return { dias: feitos, chamadas, restantes: (await diasSemEntrega(marco, 1000)).length };
+}

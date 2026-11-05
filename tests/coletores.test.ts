@@ -111,3 +111,17 @@ describe.skipIf(!process.env.DATABASE_URL)("kie.ai: recarga entre leituras (banc
     expect(usos2).toHaveLength(2); expect(usos2.some((u) => Math.abs(Number(u.valorOriginal) - 4.25) < 1e-6 && !u.estimado)).toBe(true);
   });
 });
+
+describe("orçamento/dia das campanhas (05/11: 81 de 89 sem orçamento)", async () => {
+  const { orcamentoDasCampanhas } = await import("@/coletores/meta");
+  it("campanha sem orçamento centralizado recebe a soma dos conjuntos ativos; sem ativos, a soma de todos; centralizado fica como está", () => {
+    const camps = [{ id: "c1", daily_budget: "5000" }, { id: "c2" }, { id: "c3", daily_budget: "" }, { id: "c4" }];
+    const conj = [
+      { id: "a", campaign_id: "c2", effective_status: "ACTIVE", daily_budget: "1000" }, { id: "b", campaign_id: "c2", effective_status: "PAUSED", daily_budget: "700" },
+      { id: "c", campaign_id: "c3", effective_status: "PAUSED", daily_budget: "300" }, { id: "d", campaign_id: "c3", effective_status: "DELETED", daily_budget: "900" },
+      { id: "e", campaign_id: "c4", effective_status: "ACTIVE", lifetime_budget: "90000" },
+    ];
+    const r = orcamentoDasCampanhas(camps, conj);
+    expect(r.map((c) => c.daily_budget)).toEqual(["5000", "1000", "300", undefined]);
+  });
+});

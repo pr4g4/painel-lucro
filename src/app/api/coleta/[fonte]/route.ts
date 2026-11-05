@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { invalidarDados } from "@/lib/cache";
 import { coletar, coletarTudo, FONTES, type Fonte } from "@/coletores";
 import { getIronSession } from "iron-session";
@@ -20,7 +20,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ fon
   }
   if (!segredoOk && !sessaoOk) return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
 
-  if (fonte === "todas") { const resultados = await coletarTudo(); invalidarDados(); return NextResponse.json({ resultados }); }
+  if (fonte === "todas") {
+    const resultados = await coletarTudo(); invalidarDados();
+    // aquece o cache compartilhado depois de responder (a coleta acabou de invalidar tudo): a inicial em instância fria não vai ao banco
+    const origem = req.nextUrl.origin; const segredo = process.env.CRON_SECRET;
+    try { if (segredo) after(() => fetch(`${origem}/api/aquecer`, { headers: { authorization: `Bearer ${segredo}` }, cache: "no-store", signal: AbortSignal.timeout(25_000) }).catch((e) => console.warn("[aquecer] falhou:", e instanceof Error ? e.message : e))); } catch { /* fora de requisição (testes) */ }
+    return NextResponse.json({ resultados });
+  }
   await (await import("@/db/esquema")).verificarEsquema().catch(() => null); // migrações pendentes aplicadas antes de qualquer coleta avulsa
   if (!(FONTES as readonly string[]).includes(fonte)) return NextResponse.json({ erro: `fonte desconhecida: ${fonte}` }, { status: 404 });
   const resultado = await coletar(fonte as Fonte); invalidarDados();
