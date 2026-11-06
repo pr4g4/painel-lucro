@@ -54,6 +54,7 @@ export const campanhas = pgTable("campanhas", {
   frenteId: integer("frente_id").references(() => frentes.id),
   orcamentoDiario: numeric("orcamento_diario", { precision: 14, scale: 2 }),
   orcamentoMoeda: text("orcamento_moeda"),
+  orcamentoTipo: text("orcamento_tipo"), // "dia" | "vitalicio" (orçamento total da campanha/conjunto, não por dia)
   atualizadoEm: timestamp("atualizado_em", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("campanhas_conta_campanha").on(t.contaId, t.campanhaId)]);
 

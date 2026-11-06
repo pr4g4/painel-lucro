@@ -61,7 +61,7 @@ export default async function Campanhas({ searchParams }: { searchParams: Promis
                 <td>{l.nome}</td><td className="text-xs text-ink-2">{l.contaId === process.env.META_ACT_00 ? "Meta 00" : l.contaId === process.env.META_ACT_01 ? "Meta 01" : l.contaId.startsWith("tiktok:") ? "TikTok" : l.contaId}</td>
                 <td>{l.numeroWhatsapp ?? "—"}</td><td>{l.frente ?? <span className="text-ink-3">sem frente</span>}</td>
                 <td><span className={`text-xs px-1.5 py-0.5 rounded-full border border-border ${l.status === "ACTIVE" ? "text-pos" : "text-ink-3"}`}>{l.status ?? "—"}</span></td>
-                <td className="text-right num text-ink-2 whitespace-nowrap">{l.orcamentoDiario != null ? `${l.orcamentoMoeda ?? ""} ${fmtNum(Number(l.orcamentoDiario))}` : "—"}</td>
+                <td className="text-right num text-ink-2 whitespace-nowrap">{l.orcamentoDiario != null ? <>{`${l.orcamentoMoeda ?? ""} ${fmtNum(Number(l.orcamentoDiario))}`}{l.orcamentoTipo === "vitalicio" && <span className="text-xs text-ink-3" title="orçamento total da campanha, não por dia"> vitalício</span>}</> : "—"}</td>
                 <td className="text-right num">{fmtMoeda(l.gasto, estado.moeda, taxaMxn)}</td><td className="text-right num text-ink-2">{total ? fmtPctSimples(l.gasto / total) : "—"}</td>
                 <td className="text-right num text-ink-2">{l.impressoes ? fmtNum(l.impressoes, 0) : "—"}</td>
                 <td className="text-right num text-ink-2">{l.impressoes ? fmtPctSimples(l.cliques / l.impressoes, 2) : "—"}</td>

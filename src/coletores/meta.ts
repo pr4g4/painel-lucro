@@ -20,32 +20,40 @@ export type MetaLinha = {
 export interface MetaCliente {
   /** Tenta hora; devolve { granularidade } informando o que a conta conseguiu entregar. */
   insights(contaId: string, deDia: string, ateDia: string): Promise<{ linhas: MetaLinha[]; granularidade: "hora" | "dia"; fusoConta: string }>;
-  campanhas(contaId: string): Promise<{ id: string; name: string; effective_status: string; daily_budget?: string; moeda?: string }[]>;
+  campanhas(contaId: string): Promise<CampanhaMeta[]>;
   /** Conjuntos de anúncios com orçamento próprio (campanha sem orçamento centralizado): o orçamento/dia da campanha é a soma deles. Opcional. */
   conjuntos?(contaId: string): Promise<ConjuntoMeta[]>;
   /** Fuso da conta (1 chamada; o coletor guarda em memória por 24 h). Opcional: sem ele, insights() informa. */
   fuso?(contaId: string): Promise<string>;
 }
+export type CampanhaMeta = { id: string; name: string; effective_status: string; daily_budget?: string; lifetime_budget?: string; moeda?: string; orcamento?: string; orcamentoTipo?: "dia" | "vitalicio" };
 export type ConjuntoMeta = { id: string; campaign_id: string; effective_status: string; daily_budget?: string; lifetime_budget?: string };
 
 /**
- * Orçamento/dia por campanha (em centavos, como a Meta devolve): o da própria campanha (orçamento centralizado) ou, sem ele,
- * a soma dos conjuntos ATIVOS; se nenhum ativo, a soma de todos os conjuntos não apagados (campanha pausada ainda mostra o configurado).
- * 05/11: 81 de 89 campanhas sem orçamento/dia porque o orçamento fica nos conjuntos, não na campanha.
+ * Orçamento por campanha (em centavos, como a Meta devolve) e seu tipo:
+ *  - "dia": daily_budget da campanha (orçamento centralizado) ou, sem ele, a soma dos conjuntos ATIVOS com orçamento diário
+ *    (se nenhum ativo, a soma de todos os conjuntos não apagados: campanha pausada ainda mostra o configurado);
+ *  - "vitalicio": quando não há orçamento diário em lugar nenhum, o lifetime_budget (orçamento total) da campanha ou a soma dos conjuntos,
+ *    pela mesma regra. 06/11: campanhas "TOTAL 14D"/"TOTAL 30D" usam orçamento total e apareciam com "—".
  */
-export function orcamentoDasCampanhas<T extends { id: string; daily_budget?: string }>(camps: T[], conjuntos: ConjuntoMeta[]): T[] {
-  const soma = new Map<string, { ativos: number; todos: number }>();
+export function orcamentoDasCampanhas<T extends { id: string; daily_budget?: string; lifetime_budget?: string }>(camps: T[], conjuntos: ConjuntoMeta[]): (T & { orcamento?: string; orcamentoTipo?: "dia" | "vitalicio" })[] {
+  type Soma = { ativos: number; todos: number };
+  const dia = new Map<string, Soma>(), vit = new Map<string, Soma>();
+  const acumula = (m: Map<string, Soma>, c: ConjuntoMeta, v: number) => { const acc = m.get(c.campaign_id) ?? { ativos: 0, todos: 0 }; acc.todos += v; if (c.effective_status === "ACTIVE") acc.ativos += v; m.set(c.campaign_id, acc); };
   for (const c of conjuntos) {
-    const v = Number(c.daily_budget ?? "");
-    if (!Number.isFinite(v) || v <= 0 || /DELETED|ARCHIVED/.test(c.effective_status ?? "")) continue;
-    const acc = soma.get(c.campaign_id) ?? { ativos: 0, todos: 0 };
-    acc.todos += v; if (c.effective_status === "ACTIVE") acc.ativos += v;
-    soma.set(c.campaign_id, acc);
+    if (/DELETED|ARCHIVED/.test(c.effective_status ?? "")) continue;
+    const d = Number(c.daily_budget ?? ""), l = Number(c.lifetime_budget ?? "");
+    if (Number.isFinite(d) && d > 0) acumula(dia, c, d);
+    else if (Number.isFinite(l) && l > 0) acumula(vit, c, l);
   }
+  const valor = (s?: Soma) => (s ? (s.ativos || s.todos) : 0);
   return camps.map((c) => {
-    if (c.daily_budget != null && c.daily_budget !== "" && Number(c.daily_budget) > 0) return c;
-    const s = soma.get(c.id); const v = s ? (s.ativos || s.todos) : 0;
-    return v > 0 ? { ...c, daily_budget: String(v) } : c;
+    const d = Number(c.daily_budget ?? ""), l = Number(c.lifetime_budget ?? "");
+    if (Number.isFinite(d) && d > 0) return { ...c, orcamento: String(d), orcamentoTipo: "dia" as const };
+    const sd = valor(dia.get(c.id)); if (sd > 0) return { ...c, orcamento: String(sd), orcamentoTipo: "dia" as const };
+    if (Number.isFinite(l) && l > 0) return { ...c, orcamento: String(l), orcamentoTipo: "vitalicio" as const };
+    const sl = valor(vit.get(c.id)); if (sl > 0) return { ...c, orcamento: String(sl), orcamentoTipo: "vitalicio" as const };
+    return { ...c };
   });
 }
 
@@ -125,7 +133,7 @@ export function metaClienteReal(token: string): MetaCliente {
       return paginar(r);
     },
     async campanhas(contaId) {
-      const r = await get<{ data: { id: string; name: string; effective_status: string; daily_budget?: string }[]; paging?: { next?: string } }>(`${contaId}/campaigns`, { fields: "id,name,effective_status,daily_budget", limit: "500" });
+      const r = await get<{ data: CampanhaMeta[]; paging?: { next?: string } }>(`${contaId}/campaigns`, { fields: "id,name,effective_status,daily_budget,lifetime_budget", limit: "500" });
       const moeda = await lembrar(`meta:moeda:${contaId}`, async () => (await get<{ currency: string }>(contaId, { fields: "currency" })).currency, { ttlMs: 24 * 3_600_000, rotulo: "moeda da conta Meta" });
       return (await paginar(r)).map((c) => ({ ...c, moeda }));
     },
@@ -184,8 +192,11 @@ export async function coletarMeta(cliente: MetaCliente, contas: string[], agora 
       if (plano.buscaCampanhas) {
         chamadas++;
         try {
-          let camps = await cliente.campanhas(contaId);
-          if (cliente.conjuntos) { chamadas++; camps = orcamentoDasCampanhas(camps, await cliente.conjuntos(contaId)); }
+          let camps: CampanhaMeta[] = await cliente.campanhas(contaId);
+          let conjuntos: ConjuntoMeta[] = [];
+          if (cliente.conjuntos) { chamadas++; try { conjuntos = await cliente.conjuntos(contaId); } catch (e) { errosMetadados.push(`${contaId}: conjuntos de anúncios: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`); } }
+          camps = orcamentoDasCampanhas(camps, conjuntos);
+          (detalhe[contaId] as Record<string, unknown>).orcamentos = { campanhas: camps.length, conjuntos: conjuntos.length, porDia: camps.filter((c) => c.orcamentoTipo === "dia").length, vitalicio: camps.filter((c) => c.orcamentoTipo === "vitalicio").length, sem: camps.filter((c) => !c.orcamentoTipo).length };
           const erroMeta = await gravarCampanhas(contaId, camps, frentes);
           if (erroMeta) { errosMetadados.push(`${contaId}: ${erroMeta}`); (detalhe[contaId] as Record<string, unknown>).metadados = erroMeta; }
         } catch (e) { const msg = (e instanceof Error ? e.message : String(e)).slice(0, 300); errosMetadados.push(`${contaId}: ${msg}`); (detalhe[contaId] as Record<string, unknown>).metadados = msg; }
@@ -233,12 +244,13 @@ export function linhasParaLancamentos(linhas: MetaLinha[], granularidade: "hora"
  * Grava nome/status/número/frente/orçamento das campanhas. Tenta com as colunas de orçamento (migração 0004); se o banco
  * ainda não as tiver, grava sem elas. Devolve a mensagem de erro (ou null) em vez de lançar: metadado nunca bloqueia o gasto.
  */
-export async function gravarCampanhas(contaId: string, camps: { id: string; name: string; effective_status: string; daily_budget?: string; moeda?: string }[], frentes: { id: number; regraCampanha: string }[]): Promise<string | null> {
+export async function gravarCampanhas(contaId: string, camps: CampanhaMeta[], frentes: { id: number; regraCampanha: string }[]): Promise<string | null> {
   let semOrcamento = false;
   for (const c of camps) {
     const basico = { nome: c.name, status: c.effective_status, numeroWhatsapp: extrairNumeroWhatsapp(c.name), frenteId: await resolverFrente(c.name, frentes), atualizadoEm: new Date() };
-    const orc = c.daily_budget != null && c.daily_budget !== "" ? String(Number(c.daily_budget) / 100) : null; // a Meta devolve em centavos da moeda da conta
-    const comOrc = { ...basico, orcamentoDiario: orc, orcamentoMoeda: c.moeda ?? null };
+    const bruto = c.orcamento ?? (c.daily_budget != null && c.daily_budget !== "" ? c.daily_budget : null);
+    const orc = bruto != null ? String(Number(bruto) / 100) : null; // a Meta devolve em centavos da moeda da conta
+    const comOrc = { ...basico, orcamentoDiario: orc, orcamentoMoeda: c.moeda ?? null, orcamentoTipo: orc == null ? null : (c.orcamentoTipo ?? "dia") };
     try {
       if (!semOrcamento) {
         await db.insert(schema.campanhas).values({ contaId, campanhaId: c.id, ...comOrc }).onConflictDoUpdate({ target: [schema.campanhas.contaId, schema.campanhas.campanhaId], set: comOrc });
@@ -246,13 +258,13 @@ export async function gravarCampanhas(contaId: string, camps: { id: string; name
       }
     } catch (e) {
       const msg = e instanceof Error ? `${e.message} ${(e as { cause?: Error }).cause?.message ?? ""}` : String(e);
-      if (!/orcamento_(diario|moeda)/.test(msg)) return msg.slice(0, 300);
+      if (!/orcamento_(diario|moeda|tipo)/.test(msg)) return msg.slice(0, 300);
       semOrcamento = true; // colunas da 0004 ausentes: segue sem orçamento
     }
     try { await db.insert(schema.campanhas).values({ contaId, campanhaId: c.id, ...basico }).onConflictDoUpdate({ target: [schema.campanhas.contaId, schema.campanhas.campanhaId], set: basico }); }
     catch (e) { return (e instanceof Error ? e.message : String(e)).slice(0, 300); }
   }
-  return semOrcamento ? "colunas de orçamento ausentes (migração 0004 pendente); campanhas gravadas sem orçamento" : null;
+  return semOrcamento ? "colunas de orçamento ausentes (migração 0004/0005 pendente); campanhas gravadas sem orçamento" : null;
 }
 
 /**

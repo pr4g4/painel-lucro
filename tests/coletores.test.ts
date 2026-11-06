@@ -122,6 +122,17 @@ describe("orçamento/dia das campanhas (05/11: 81 de 89 sem orçamento)", async 
       { id: "e", campaign_id: "c4", effective_status: "ACTIVE", lifetime_budget: "90000" },
     ];
     const r = orcamentoDasCampanhas(camps, conj);
-    expect(r.map((c) => c.daily_budget)).toEqual(["5000", "1000", "300", undefined]);
+    expect(r.map((c) => c.orcamento)).toEqual(["5000", "1000", "300", "90000"]);
+    expect(r.map((c) => c.orcamentoTipo)).toEqual(["dia", "dia", "dia", "vitalicio"]);
+  });
+  it("06/11: campanha 'TOTAL 14D' com orçamento total (lifetime) na campanha ou nos conjuntos vira 'vitalício'; diário tem prioridade", () => {
+    const camps = [{ id: "t14", lifetime_budget: "120000" }, { id: "t30" }, { id: "mix" }, { id: "nada" }];
+    const conj = [
+      { id: "a", campaign_id: "t30", effective_status: "ACTIVE", lifetime_budget: "50000" }, { id: "b", campaign_id: "t30", effective_status: "PAUSED", lifetime_budget: "30000" },
+      { id: "c", campaign_id: "mix", effective_status: "ACTIVE", lifetime_budget: "99999" }, { id: "d", campaign_id: "mix", effective_status: "ACTIVE", daily_budget: "2500" },
+      { id: "e", campaign_id: "nada", effective_status: "ARCHIVED", lifetime_budget: "1" },
+    ];
+    const r = orcamentoDasCampanhas(camps, conj);
+    expect(r.map((c) => [c.orcamento, c.orcamentoTipo])).toEqual([["120000", "vitalicio"], ["50000", "vitalicio"], ["2500", "dia"], [undefined, undefined]]);
   });
 });
