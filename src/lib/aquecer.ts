@@ -16,12 +16,11 @@ export async function aquecer(): Promise<{ passos: { nome: string; ms: number; e
     try { await fn(); passos.push({ nome, ms: Date.now() - t }); }
     catch (e) { passos.push({ nome, ms: Date.now() - t, erro: e instanceof Error ? e.message : String(e) }); }
   };
-  await Promise.all([
-    passo("inicial (desde o marco zero)", () => contextoPeriodo({})),
-    passo("inicial (hoje)", () => contextoPeriodo({ p: "hoje" })),
-    passo("créditos", () => carregarCreditos()),
-    passo("avisos", () => avisosAbertos()),
-  ]);
+  // em sequência, de propósito: o banco do plano grátis não aguenta tudo de uma vez
+  await passo("créditos", () => carregarCreditos());
+  await passo("avisos", () => avisosAbertos());
+  await passo("inicial (desde o marco zero)", () => contextoPeriodo({}));
+  await passo("inicial (hoje)", () => contextoPeriodo({ p: "hoje" }));
   await passo("barra Hoje", () => dadosHoje());
   return { passos, totalMs: Date.now() - t0 };
 }

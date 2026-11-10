@@ -186,7 +186,12 @@ export function pedacosDaJanela(inicio: Date, fim: Date, hoje: string, tz = TZ_D
 }
 async function lancamentosPorDias(ini: string, fim: string): Promise<Serial<LancamentoCalc>[]> {
   const hoje = formatInTimeZone(new Date(), TZ_DIA, "yyyy-MM-dd");
-  const partes = await Promise.all(pedacosDaJanela(new Date(ini), new Date(fim), hoje).map((p) => p.tipo === "bloco" ? lancBlocoAntigo(p.dia) : p.tipo === "dia-antigo" ? lancDiaAntigo(p.dia) : lancDiaRecente(p.dia)));
+  // no máximo 2 pedaços por vez: o banco do plano grátis engasga com muitas consultas simultâneas (10/11 à tarde: "Dado indisponível" logo após o deploy)
+  const pedacos = pedacosDaJanela(new Date(ini), new Date(fim), hoje);
+  const partes: Serial<LancamentoCalc>[][] = [];
+  for (let i = 0; i < pedacos.length; i += 2) {
+    partes.push(...(await Promise.all(pedacos.slice(i, i + 2).map((p) => p.tipo === "bloco" ? lancBlocoAntigo(p.dia) : p.tipo === "dia-antigo" ? lancDiaAntigo(p.dia) : lancDiaRecente(p.dia)))));
+  }
   return partes.flat().filter((x) => x.instante >= ini && x.instante < fim);
 }
 const lancamentosCache = (ini: string, fim: string) => lembrar(`lancamentos:${ini}:${fim}`, () => lancamentosPorDias(ini, fim), { ttlMs: 30_000, swr: true, rotulo: "lançamentos" });
@@ -238,8 +243,9 @@ export async function montarEntradaAmpla(janelaPedida: Periodo, op: OpcoesConsul
     }
   };
   const ini = janela.inicio.toISOString(), fim = janela.fim.toISOString();
-  const [parametrosS, vendasS, lancamentosS, manuaisS, cambioS] = await Promise.all([
-    parametrosCache().catch((e) => { console.error("[dados] parâmetros indisponíveis:", e); throw new Error("parâmetros indisponíveis: o banco demorou a responder e não há cópia na memória; tente de novo em instantes"); }),
+  // parâmetros primeiro e sozinhos: são obrigatórios e minúsculos; não podem esperar na fila atrás das leituras grandes
+  const parametrosS = await parametrosCache().catch((e) => { console.error("[dados] parâmetros indisponíveis:", e); throw new Error("parâmetros indisponíveis: o banco demorou a responder e não há cópia na memória; tente de novo em instantes"); });
+  const [vendasS, lancamentosS, manuaisS, cambioS] = await Promise.all([
     seguro(vendasCache(ini, fim), [] as Serial<VendaCalc>[], "vendas"),
     seguro(lancamentosCache(ini, fim), [] as Serial<LancamentoCalc>[], "lançamentos"),
     seguro(manuaisCache(), [] as Serial<ManualCalc>[], "lançamentos manuais"),
