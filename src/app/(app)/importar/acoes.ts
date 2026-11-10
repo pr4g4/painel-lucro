@@ -1,6 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
-import { invalidarDados } from "@/lib/cache";
+import { invalidarHistorico } from "@/lib/cache";
 import { exigirSessao } from "@/lib/auth/sessao";
 import { abrirAviso, resolverAvisos } from "@/coletores/base";
 import { lerCsvZenithAuto, importarVendasZenith, ehCsvExportZenith, lerCsvExportZenith, conciliarPorReferencia } from "@/coletores/zenith";
@@ -19,7 +19,7 @@ export async function importarCsv(_prev: { ok?: boolean; mensagem?: string } | u
     // conferência contra perda: referência que a Zenith tem e o painel não vira aviso em /avisos até ser importada pelo CSV de Conciliação
     if (r.naoEncontradas.length) await abrirAviso("vendas_faltando", "zenith", `${r.naoEncontradas.length} venda(s) da Zenith que o painel NÃO tem (CSV de exportação de ${new Date().toISOString().slice(0, 10)}): ${r.naoEncontradas.slice(0, 20).join(", ")}${r.naoEncontradas.length > 20 ? "…" : ""}. Importe o CSV de Conciliação do dia em /importar para lançá-las.`).catch(() => {});
     else await resolverAvisos("zenith", "vendas_faltando").catch(() => {});
-    revalidatePath("/"); invalidarDados(); revalidatePath("/dre"); revalidatePath("/lancamentos");
+    revalidatePath("/"); invalidarHistorico(); revalidatePath("/dre"); revalidatePath("/lancamentos");
     const partes = [`${r.total} linha(s) do CSV de exportação da Zenith.`, `${r.atualizadas.length} status atualizado(s)${r.atualizadas.length ? `: ${r.atualizadas.slice(0, 10).join(", ")}${r.atualizadas.length > 10 ? "…" : ""}` : ""}.`, `${r.jaIguais} já estavam iguais.`];
     if (r.naoEncontradas.length) partes.push(`${r.naoEncontradas.length} referência(s) que o painel NÃO tem (webhook não entregou; importe o CSV de Conciliação, que traz data e taxas): ${r.naoEncontradas.slice(0, 20).join(", ")}${r.naoEncontradas.length > 20 ? "…" : ""}.`);
     if (r.valorDiferente.length) partes.push(`Valor diferente em ${r.valorDiferente.length}: ${r.valorDiferente.slice(0, 5).join("; ")}.`);
@@ -29,7 +29,7 @@ export async function importarCsv(_prev: { ok?: boolean; mensagem?: string } | u
   const vendas = lerCsvZenithAuto(texto);
   if (!vendas.length) return { ok: false, mensagem: "Não encontrei linhas de venda no CSV (esperado o arquivo de Conciliação da Zenith, com id_venda; ou um CSV com id, status, data, bruto…)." };
   const r = await importarVendasZenith(vendas, "zenith");
-  revalidatePath("/"); invalidarDados(); revalidatePath("/dre"); revalidatePath("/lancamentos");
+  revalidatePath("/"); invalidarHistorico(); revalidatePath("/dre"); revalidatePath("/lancamentos");
   const aprovadas = vendas.filter((v) => v.status === "aprovada").length, pendentes = vendas.filter((v) => v.status === "pendente").length;
   return r.ok ? { ok: true, mensagem: `${r.registros} venda(s) importadas/atualizadas: ${aprovadas} aprovada(s), ${pendentes} pendente(s), ${vendas.length - aprovadas - pendentes} outra(s). Importar de novo não duplica.` } : { ok: false, mensagem: `Falhou: ${r.erro}` };
 }
@@ -46,7 +46,7 @@ export async function importarCsvTikTokAcao(_prev: { ok?: boolean; mensagem?: st
   const linhas = lerCsvTikTok(texto);
   if (!linhas.length) return { ok: false, mensagem: "Não encontrei colunas de campanha, data e custo no arquivo. Exporte o relatório do Ads Manager com as colunas Nome da campanha, Data (por dia ou por hora) e Custo." };
   const r = await importarCsvTikTok(linhas, moeda);
-  revalidatePath("/"); invalidarDados(); revalidatePath("/dre"); revalidatePath("/campanhas"); revalidatePath("/lancamentos");
+  revalidatePath("/"); invalidarHistorico(); revalidatePath("/dre"); revalidatePath("/campanhas"); revalidatePath("/lancamentos");
   const total = linhas.reduce((s, l) => s + l.custo, 0);
   const dias = new Set(linhas.map((l) => l.quando.toISOString().slice(0, 10)));
   const ign = Number((r.detalhe as { ignoradasJaNaApi?: number } | undefined)?.ignoradasJaNaApi ?? 0);

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getIronSession } from "iron-session";
 import { SESSAO_OPCOES, type Sessao } from "@/lib/auth/sessao";
 import { recuperarMeta, metaClienteReal } from "@/coletores/meta";
-import { invalidarDados } from "@/lib/cache";
+import { invalidarHistorico } from "@/lib/cache";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   if (!token || !contas.length) return NextResponse.json({ erro: "Meta não configurada (META_TOKEN / META_ACT_00 / META_ACT_01)" }, { status: 400 });
   const esquema = await (await import("@/db/esquema")).verificarEsquema(true).catch((e) => ({ ok: false, aplicados: [], pendentes: [], erro: String(e) }));
   const r = await recuperarMeta(metaClienteReal(token), contas, de, ate);
-  invalidarDados();
+  invalidarHistorico();
   const gravados = r.dias.reduce((s, d) => s + d.gravados, 0), erros = r.dias.filter((d) => d.erro);
   const continuar = r.proximo ? `${req.nextUrl.origin}/api/coleta/meta/recuperar?de=${r.proximo}&ate=${ate}` : null;
   return NextResponse.json({

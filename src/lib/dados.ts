@@ -5,6 +5,7 @@
 import { and, asc, desc, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db, schema, executar } from "@/db";
 import { unstable_cache } from "next/cache";
+import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
 import { lembrar } from "@/lib/memoria";
 export const TAG_DADOS = "dados";
 import {
@@ -51,7 +52,8 @@ export function diaBrasilia(d: Date): string {
 
 export async function carregarVendas(janela: Periodo): Promise<VendaCalc[]> {
   // Traz aprovadas/reembolsadas que tocam a janela e todas as pendentes (são poucas e informativas)
-  const rows = await executar((d) => d.select().from(schema.vendas).where(or(
+  // sem a coluna payload (o evento bruto da Zenith, o maior campo da tabela): só o método, extraído no banco. 10/11: saída de rede do Supabase estourada.
+  const rows = await executar((d) => d.select({ ...COLUNAS_VENDA, metodo: sql<string | null>`coalesce(${schema.vendas.payload}->>'metodo_pagamento', ${schema.vendas.payload}->>'metodo', ${schema.vendas.payload}->'data'->>'paymentMethod', ${schema.vendas.payload}->'data'->>'method')` }).from(schema.vendas).where(or(
     and(gte(schema.vendas.aprovadaEm, janela.inicio), lt(schema.vendas.aprovadaEm, janela.fim)),
     and(gte(schema.vendas.reembolsadaEm, janela.inicio), lt(schema.vendas.reembolsadaEm, janela.fim)),
     eq(schema.vendas.status, "pendente"),
@@ -63,26 +65,22 @@ export async function carregarVendas(janela: Periodo): Promise<VendaCalc[]> {
     reembolsadaEm: r.reembolsadaEm, produto: r.produto, moeda: r.moeda, brutoOriginal: n(r.brutoOriginal), taxaCambio: n(r.taxaCambio),
     brutoBrl: n(r.brutoBrl), taxaPctBrl: n(r.taxaPctBrl), taxaFixaBrl: n(r.taxaFixaBrl), cambioPctBrl: n(r.cambioPctBrl),
     liquidoBrl: n(r.liquidoBrl), reservaBrl: n(r.reservaBrl), reservaLiberadaEm: r.reservaLiberadaEm, historico: r.historico,
-    metodo: metodoDe(r.payload),
+    metodo: r.metodo ?? null,
   }));
 }
-
-function metodoDe(payload: unknown): string | null {
-  const pl = payload as { metodo_pagamento?: string; metodo?: string; data?: { paymentMethod?: string; method?: string } } | null;
-  return pl?.metodo_pagamento ?? pl?.metodo ?? pl?.data?.paymentMethod ?? pl?.data?.method ?? null;
-}
+const v = schema.vendas;
+const COLUNAS_VENDA = { id: v.id, fonte: v.fonte, idOrigem: v.idOrigem, status: v.status, criadaEm: v.criadaEm, aprovadaEm: v.aprovadaEm, reembolsadaEm: v.reembolsadaEm, produto: v.produto, moeda: v.moeda, brutoOriginal: v.brutoOriginal, taxaCambio: v.taxaCambio, brutoBrl: v.brutoBrl, taxaPctBrl: v.taxaPctBrl, taxaFixaBrl: v.taxaFixaBrl, cambioPctBrl: v.cambioPctBrl, liquidoBrl: v.liquidoBrl, reservaBrl: v.reservaBrl, reservaLiberadaEm: v.reservaLiberadaEm, historico: v.historico };
+const l = schema.lancamentos;
+/** Só o que o cálculo usa: sem payload (linha bruta da Meta, centenas de bytes por hora de campanha), chave natural e datas de coleta. */
+const COLUNAS_LANCAMENTO = { id: l.id, fonte: l.fonte, tipo: l.tipo, instante: l.instante, granularidade: l.granularidade, descricao: l.descricao, valorBrl: l.valorBrl, valorOriginal: l.valorOriginal, moeda: l.moeda, contaId: l.contaId, campanhaId: l.campanhaId, modelo: l.modelo, historico: l.historico, estimado: l.estimado, frente: schema.frentes.nome };
 
 export async function carregarLancamentos(janela: Periodo): Promise<LancamentoCalc[]> {
-  const rows = await executar((d) => d.select({ l: schema.lancamentos, frente: schema.frentes.nome })
+  const rows = await executar((d) => d.select(COLUNAS_LANCAMENTO)
     .from(schema.lancamentos)
     .leftJoin(schema.campanhas, and(eq(schema.campanhas.contaId, schema.lancamentos.contaId), eq(schema.campanhas.campanhaId, schema.lancamentos.campanhaId)))
     .leftJoin(schema.frentes, eq(schema.frentes.id, schema.campanhas.frenteId))
     .where(and(gte(schema.lancamentos.instante, janela.inicio), lt(schema.lancamentos.instante, janela.fim))), 10000, "lançamentos");
-  return rows.map(({ l, frente }) => ({
-    id: l.id, fonte: l.fonte, tipo: l.tipo, instante: l.instante, granularidade: l.granularidade, descricao: l.descricao,
-    valorBrl: n(l.valorBrl), valorOriginal: n(l.valorOriginal), moeda: l.moeda, contaId: l.contaId, campanhaId: l.campanhaId,
-    modelo: l.modelo, frente, historico: l.historico, estimado: l.estimado,
-  }));
+  return rows.map((r) => ({ ...r, valorBrl: n(r.valorBrl), valorOriginal: n(r.valorOriginal) }));
 }
 
 export async function carregarManuais(): Promise<ManualCalc[]> {
@@ -156,10 +154,42 @@ const vendasCache = unstable_cache((ini: string, fim: string) => lembrar(`vendas
   const rows = await carregarVendas({ inicio: new Date(ini), fim: new Date(fim) });
   return rows.map((v) => ({ ...v, criadaEm: v.criadaEm?.toISOString() ?? null, aprovadaEm: v.aprovadaEm?.toISOString() ?? null, reembolsadaEm: v.reembolsadaEm?.toISOString() ?? null, reservaLiberadaEm: v.reservaLiberadaEm?.toISOString() ?? null }));
 }, { ttlMs: 30_000, swr: true, rotulo: "vendas" }), ["vendas"], { revalidate: 60, tags: [TAG_DADOS] });
-const lancamentosCache = unstable_cache((ini: string, fim: string) => lembrar(`lancamentos:${ini}:${fim}`, async () => {
-  const rows = await carregarLancamentos({ inicio: new Date(ini), fim: new Date(fim) });
-  return rows.map((l) => ({ ...l, instante: l.instante.toISOString() }));
-}, { ttlMs: 30_000, swr: true, rotulo: "lançamentos" }), ["lancamentos"], { revalidate: 60, tags: [TAG_DADOS] });
+/**
+ * Lançamentos em pedaços de UM DIA (Brasília) no cache compartilhado: dias passados ficam 6 h sem voltar ao banco (tag "dados-historico",
+ * invalidada só por importação/recuperação); hoje e ontem seguem a tag "dados" (toda coleta). Cada coleta relê 2 dias, não o período inteiro,
+ * e cada pedaço fica pequeno o bastante para o Data Cache da Vercel guardar. A memória da instância guarda a janela já montada.
+ */
+export const TAG_HISTORICO = "dados-historico";
+const TZ_DIA = process.env.APP_TZ ?? "America/Sao_Paulo";
+const ANCORA_BLOCO = "2026-10-03"; // marco zero: os blocos de 7 dias começam aqui
+async function lerLancamentosDias(dia: string, dias: number): Promise<Serial<LancamentoCalc>[]> {
+  const inicio = fromZonedTime(`${dia}T00:00:00`, TZ_DIA), fim = fromZonedTime(`${somarDias(dia, dias)}T00:00:00`, TZ_DIA);
+  return (await carregarLancamentos({ inicio, fim })).map((x) => ({ ...x, instante: x.instante.toISOString() }));
+}
+const lancDiaRecente = unstable_cache((dia: string) => lerLancamentosDias(dia, 1), ["lanc-dia-recente"], { revalidate: 60, tags: [TAG_DADOS] });
+const lancDiaAntigo = unstable_cache((dia: string) => lerLancamentosDias(dia, 1), ["lanc-dia-antigo"], { revalidate: 6 * 3600, tags: [TAG_HISTORICO] });
+const lancBlocoAntigo = unstable_cache((dia: string) => lerLancamentosDias(dia, 7), ["lanc-bloco-antigo"], { revalidate: 6 * 3600, tags: [TAG_HISTORICO] });
+function somarDias(dia: string, n: number): string { const d = new Date(`${dia}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+const difDias = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00Z`).getTime() - new Date(`${a}T12:00:00Z`).getTime()) / 86_400_000);
+/** Pedaços que cobrem a janela: blocos de 7 dias inteiramente passados; dias soltos no bloco atual (antigos ou recentes = hoje/ontem). */
+export function pedacosDaJanela(inicio: Date, fim: Date, hoje: string, tz = TZ_DIA): { tipo: "bloco" | "dia-antigo" | "dia-recente"; dia: string }[] {
+  const ontem = somarDias(hoje, -1);
+  const primeiro = formatInTimeZone(inicio, tz, "yyyy-MM-dd"), ultimo = formatInTimeZone(new Date(fim.getTime() - 1), tz, "yyyy-MM-dd");
+  const out: { tipo: "bloco" | "dia-antigo" | "dia-recente"; dia: string }[] = [];
+  let bloco = somarDias(ANCORA_BLOCO, Math.floor(difDias(ANCORA_BLOCO, primeiro) / 7) * 7);
+  for (let i = 0; i < 60 && bloco <= ultimo; i++, bloco = somarDias(bloco, 7)) {
+    const fimBloco = somarDias(bloco, 7); // exclusivo
+    if (fimBloco <= ontem && bloco >= primeiro) { out.push({ tipo: "bloco", dia: bloco }); continue; }
+    for (let d = bloco < primeiro ? primeiro : bloco; d < fimBloco && d <= ultimo; d = somarDias(d, 1)) out.push({ tipo: d >= ontem ? "dia-recente" : "dia-antigo", dia: d });
+  }
+  return out;
+}
+async function lancamentosPorDias(ini: string, fim: string): Promise<Serial<LancamentoCalc>[]> {
+  const hoje = formatInTimeZone(new Date(), TZ_DIA, "yyyy-MM-dd");
+  const partes = await Promise.all(pedacosDaJanela(new Date(ini), new Date(fim), hoje).map((p) => p.tipo === "bloco" ? lancBlocoAntigo(p.dia) : p.tipo === "dia-antigo" ? lancDiaAntigo(p.dia) : lancDiaRecente(p.dia)));
+  return partes.flat().filter((x) => x.instante >= ini && x.instante < fim);
+}
+const lancamentosCache = (ini: string, fim: string) => lembrar(`lancamentos:${ini}:${fim}`, () => lancamentosPorDias(ini, fim), { ttlMs: 30_000, swr: true, rotulo: "lançamentos" });
 const TTL_PEQUENO = 10 * 60_000; // parâmetros, categorias, manuais e câmbio: pequenos e quase não mudam
 export const PRAZO_PAGINA_MS = 6000; // consulta que alimenta tela: 6 s; passou disso, mostra o último valor bom (memória) ou o esqueleto
 const parametrosCache = unstable_cache(() => lembrar("parametros", async () => (await carregarParametros()).map((p) => ({ ...p, vigenciaInicio: p.vigenciaInicio.toISOString(), vigenciaFim: p.vigenciaFim?.toISOString() ?? null })), { ttlMs: TTL_PEQUENO, swr: true, vazioEhErro: true, rotulo: "parâmetros" }), ["parametros"], { revalidate: 60, tags: [TAG_DADOS] });

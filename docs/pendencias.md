@@ -150,3 +150,14 @@ Como medir de novo: `SIMULAR_LATENCIA_DB_MS=1000 npm start` e `node scripts/medi
 ## 06/11 — orçamento "—" em 4 campanhas ativas da Meta 00
 
 **Causa:** essas campanhas usam **orçamento total** (vitalício), não por dia: os nomes "TOTAL 14D" e "TOTAL 30D" dizem isso. A coleta só pedia à Meta o `daily_budget`, da campanha e dos conjuntos, e ignorava o `lifetime_budget`. Correção: a coleta horária lê os dois nos dois níveis; sem orçamento diário em lugar nenhum, usa o total (da campanha, ou a soma dos conjuntos ativos/todos) e grava o tipo na coluna nova `campanhas.orcamento_tipo` (migração 0005, aplicada sozinha pelo app na próxima coleta). A tela mostra o valor com a etiqueta "vitalício". Se a leitura dos conjuntos falhar, as campanhas continuam sendo gravadas e o erro vai para o aviso `metadados_campanhas`. O resumo da coleta (`detalhe[conta].orcamentos`) conta quantas ficaram por dia, vitalício e sem orçamento.
+
+## 10/11 — e-mail do Supabase: saída de rede 17 GB (limite 5,5 GB) e corte em 12/11
+
+**Causa:** cada leitura do painel trazia do banco a coluna `payload` dos lançamentos e das vendas (a linha bruta da Meta por hora de campanha e o evento inteiro da Zenith), o maior campo das tabelas, e o período padrão vai desde o marco zero (03/10). Desde 05/11 o aquecimento refazia essa leitura inteira a cada coleta (144 vezes por dia) e a cada webhook, somando ao que cada abertura de página já puxava. Resultado: gigabytes por dia saindo do Supabase.
+
+**Correção (sem mexer em cálculo nenhum):**
+- Leituras de vendas e lançamentos trazem só as colunas que o cálculo usa (o método de pagamento é extraído no próprio banco); nada de `payload`, chave natural ou datas de coleta. Localmente a leitura inteira caiu de 1,2 MB para 0,57 MB; em produção, onde o payload é maior, a redução é maior.
+- Lançamentos em pedaços no cache compartilhado: blocos de 7 dias inteiramente passados e dias soltos do bloco atual ficam 6 h sem voltar ao banco (tag `dados-historico`, derrubada só por importação de CSV ou recuperação da Meta); só hoje e ontem são relidos a cada coleta. Antes, cada coleta relia ~38 dias; agora, 2 dias. Medido localmente: cache vazio = 18 consultas pequenas em paralelo (0,5 s); depois de uma coleta, só 4 consultas de lançamentos.
+- Cada pedaço fica pequeno, o que também garante que o Data Cache da Vercel consiga guardá-lo (ele descarta itens grandes, e aí toda abertura ia ao banco).
+
+**Como acompanhar:** Supabase → Painel de Uso → "Egress" deve cair para poucos MB por dia a partir do deploy. Se a Supabase mantiver a restrição após 12/11 por causa do consumo já feito neste ciclo, a saída é responder ao e-mail dizendo que a causa foi corrigida ou passar para o plano Pro.

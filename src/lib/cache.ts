@@ -5,3 +5,9 @@ export function invalidarDados() {
   esquecerMemoria();
   try { revalidateTag("dados"); } catch { /* sem contexto de requisição */ }
 }
+
+/** Dados de dias passados mudaram (importação de CSV, recuperação da Meta): derruba também o cache longo por dia. */
+export function invalidarHistorico() {
+  invalidarDados();
+  try { revalidateTag("dados-historico"); } catch { /* sem contexto de requisição */ }
+}
