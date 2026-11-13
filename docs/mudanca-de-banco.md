@@ -4,7 +4,7 @@ Para quem vai fazer: Erick. Tempo: 30 a 45 min. Eu (Claude) não vejo nenhum seg
 O site na Vercel continua o mesmo; só o banco muda. O webhook da Zenith e as chaves da Meta/OpenAI/kie não mudam.
 
 ## Passo 1 — Criar o projeto novo (5 min)
-1. Entre na conta nova do Supabase → **New project**. Nome: `painel-lucro`. Região: **South America (São Paulo)**. Anote a senha do banco num lugar seguro (nunca aqui).
+1. Entre na conta nova do Supabase → **New project**. Nome: `painel-lucro`. Região: a mesma das funções da Vercel (`regions` em vercel.json). Feito em 13/11: projeto `speijoncbtkhyqigebrc` em us-east-1, e vercel.json passou a `iad1`. Anote a senha do banco num lugar seguro (nunca aqui).
 2. Espere o projeto ficar "Active".
 
 ## Passo 2 — Criar as tabelas (2 min)
@@ -43,3 +43,6 @@ Projeto novo → SQL Editor → cole `supabase/novo-banco/03_depois_de_importar.
 ## Se algo der errado
 - "Dado indisponível" após o redeploy: confira a `DATABASE_URL` (porta 6543, senha certa). `/api/diagnostico` mostra o erro de conexão.
 - Importação de CSV reclamando de coluna: o CSV foi exportado de outra tabela, ou o arquivo foi editado. Exporte de novo sem mexer.
+
+## Feito em 13/11 (registro)
+Mudança concluída pelo Claude in Chrome: projeto novo `speijoncbtkhyqigebrc` (us-east-1), dados importados e conferidos (vendas 2799, lançamentos 9211, zenith_eventos 3244), contadores ajustados, agendador pg_cron com segredo novo no Vault, `DATABASE_URL` e `CRON_SECRET` trocados na Vercel, redeploy ok, `/api/saude` ok e coleta automática respondendo 200. Em seguida, `vercel.json` passou de `gru1` para `iad1` para as funções ficarem na mesma região do banco. O projeto antigo (`jtfduvwqecdbcqlgbqxu`) ficou bloqueado até 03/12 e pode ser apagado.

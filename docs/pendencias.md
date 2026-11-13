@@ -161,3 +161,6 @@ Como medir de novo: `SIMULAR_LATENCIA_DB_MS=1000 npm start` e `node scripts/medi
 - Cada pedaço fica pequeno, o que também garante que o Data Cache da Vercel consiga guardá-lo (ele descarta itens grandes, e aí toda abertura ia ao banco).
 
 **Como acompanhar:** Supabase → Painel de Uso → "Egress" deve cair para poucos MB por dia a partir do deploy. Se a Supabase mantiver a restrição após 12/11 por causa do consumo já feito neste ciclo, a saída é responder ao e-mail dizendo que a causa foi corrigida ou passar para o plano Pro.
+
+## 13/11 — banco novo
+Supabase cortou o projeto antigo por saída de rede (23 GB). Mudança para o projeto novo `speijoncbtkhyqigebrc` (us-east-1) concluída; funções da Vercel movidas para `iad1` (mesma região do banco). Detalhes em docs/mudanca-de-banco.md. Acompanhar o "Egress" do projeto novo nos primeiros dias: esperado poucos MB por dia.

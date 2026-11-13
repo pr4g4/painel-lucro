@@ -13,7 +13,7 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
    - Organization: a sua (já vem criada).
    - Name: `painel-lucro`
    - Database Password: clique **Generate a password** e **copie para um lugar seguro** (Notas do celular, por exemplo). Você vai usar daqui a pouco.
-   - Region: **South America (São Paulo)**.
+   - Region: a mesma da Vercel. Desde 13/11 o banco é o projeto `speijoncbtkhyqigebrc` em **us-east-1 (Virgínia)** e as funções da Vercel rodam em `iad1` (vercel.json), na mesma região: consulta não cruza continente.
    - Plan: **Free**.
    - Clique **Create new project** e espere 1–2 minutos.
 3. Pegar a **URL de conexão**:
