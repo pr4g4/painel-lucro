@@ -77,18 +77,16 @@ Desde 02/11 toda coleta começa conferindo o banco e aplica sozinha o que faltar
   7. Se algum evento do webhook falhar por falta de câmbio (fim de semana sem PTAX), ele é reprocessado sozinho na próxima coleta de câmbio (a cada 10 min). Para forçar agora e ver os números, abra logado: `https://SEU-SITE.vercel.app/api/zenith/reprocessar?cambio=1` (mostra quantas taxas PTAX há por moeda, a data da última e o que foi reprocessado).
   Regra: a mesma venda pode chegar como `deposit.credited` e também `payment.captured`/`checkout.succeeded`; o app conta a receita **uma vez por `referenceId`** (sem referenceId, por `data.id`). Reembolso entra como linha negativa na data do reembolso. Reserva retida = 10% do bruto (parâmetro).
 
-## Página inicial (/) e Detalhes
-- A inicial mostra só o essencial: período (Hoje · Ontem · 7 dias, resto em "Mais"), lucro líquido grande, metade p/ sócio e comparação, linha de status com botão de atualizar, 4 blocos (receita, Meta, IA, vendas), gráfico de lucro por hora e, só quando houver, chips de saldo baixo das IAs. "Ver detalhes" leva a /detalhes, que tem tudo o que saiu da inicial (indicadores, custos, vendas, gráficos, projeção, créditos, fontes). Nenhum número muda entre as duas.
-- Ao trocar período os números contam até o valor novo; passou de 3 s aparece a animação de barras com frases; passou de 12 s, "Tentar de novo". Venda nova com a página aberta mostra "+1 venda · MX$ …"; lucro do dia virando positivo solta um confete (1× por dia). Com "reduzir movimento" no aparelho, nada disso anima.
+## O que o painel tem (enxuto desde 13/11)
+Erick e Ian usam só a **inicial**: período (Hoje · Ontem · 7 dias · Mais), lucro líquido, metade por sócio, comparação com o período anterior, receita líquida, Meta (ou Meta + TikTok) com imposto, IA, nº de vendas, **funil** (vendas geradas no período, pendentes em quantidade e valor, conversão = aprovadas ÷ geradas, como a "Taxa de aprovação" da Zenith), gráfico do lucro acumulado e saldos das IAs.
+As outras telas foram apagadas. Ficaram só as necessárias para os dados continuarem certos:
+- **/avisos** — estado das fontes e avisos (webhook rejeitado, migração, vendas faltando…).
+- **/importar** — CSV da Zenith (conciliação e exportação) e do TikTok.
+- **/parametros** — parâmetros com vigência, frentes, **lançamentos manuais** (ZapData, operação, entradas, aportes) e categorias, **créditos da OpenAI** (recarga / saldo conferido), usuários; no celular, tema e Sair ficam aqui.
+- Rotas de API: coleta, webhook e conferência da Zenith (`/api/zenith/eventos`), recuperação da Meta, `/api/resumo`, `/api/saude`, `/api/diagnostico`, `/api/aquecer`.
 
-## Como o painel é organizado (depois do visual novo)
-- **Barra "Hoje"** fixa no topo de todas as telas: lucro, receita, Meta, IA e saldos das IAs de hoje. Cada item leva para a tela certa.
-- **Painel**: o número grande é o lucro líquido do período escolhido; abaixo, 4 números-chave; depois, seções que abrem com um toque (ficam fechadas até você abrir; o navegador lembra).
-- **Opções ▾** (ao lado da linha do período): fuso, moeda, gráfico por hora/dia, incluir histórico/manuais, copiar link e salvar visão.
-- **Indicadores → IA por venda**: IA do período ÷ vendas aprovadas, com a divisão OpenAI/kie.ai e um semáforo contra o ticket médio (verde < 25 %, amarelo 25–40 %, vermelho > 40 %).
-- **Gráficos → Lucro líquido por hora**: barras verde/vermelho por hora, linha do acumulado e um ponto por venda (toque para ver MX$ bruto, R$ líquido e método). Botão para ver Meta e IA por hora. Abre sozinho em "Hoje" e "Últimas 24 h".
-- **Gráficos → IA por hora (48 h)**: OpenAI e kie.ai separadas. O botão "Marcar no gráfico" grava "mudei o robô às HH:MM" como linha vertical e mostra o gasto por hora antes e depois.
-- Prints de como deve ficar: pasta `docs/prints/`.
+## Consumo do banco (por que o painel lê pouco)
+Vendas e lançamentos chegam ao cálculo **agregados no banco** (uma linha = várias vendas/lançamentos iguais da mesma hora, ou do mesmo dia quando com mais de 48 h), numa única janela (do marco zero até agora) que serve a inicial, a barra Hoje, o aquecimento e o /api/resumo. Cada coleta lê cada tabela uma vez: vendas agregadas (~5 linhas por dia + ~2 por hora recente), lançamentos agregados (~6 por dia + ~6 por hora recente), parâmetros, manuais, câmbio, coletas (6 linhas), avisos abertos, créditos (OpenAI 7 dias e kie.ai 24 h, sem payload) e alertas. Nada de `payload` nas leituras de tela.
 
 ## Conferir a Zenith (venda que falta)
 - `/api/zenith/eventos?dia=AAAA-MM-DD` (logado como editor): eventos recebidos no dia, o que o painel fez com cada um, vendas gravadas e o botão **criar venda** para um evento que foi mesclado por engano. Sem evento no horário = webhook não chegou → CSV de Conciliação em /importar.

@@ -5,9 +5,10 @@
 import { and, asc, desc, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db, schema, executar } from "@/db";
 import { unstable_cache } from "next/cache";
-import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
 import { lembrar } from "@/lib/memoria";
+import { vendasAgregadas, lancamentosAgregados, paraVendasCalc, paraLancamentosCalc } from "@/lib/agregados";
 export const TAG_DADOS = "dados";
+const MARCO_PADRAO = new Date("2026-10-03T03:00:00Z");
 import {
   calcularDRE, periodoAnterior, type Entrada, type Parametro, type Periodo, type VendaCalc, type LancamentoCalc,
   type ManualCalc, type CambioFn, type OpcoesCalculo, type ResultadoDRE,
@@ -56,9 +57,9 @@ export async function carregarVendas(janela: Periodo): Promise<VendaCalc[]> {
   const rows = await executar((d) => d.select({ ...COLUNAS_VENDA, metodo: sql<string | null>`coalesce(${schema.vendas.payload}->>'metodo_pagamento', ${schema.vendas.payload}->>'metodo', ${schema.vendas.payload}->'data'->>'paymentMethod', ${schema.vendas.payload}->'data'->>'method')` }).from(schema.vendas).where(or(
     and(gte(schema.vendas.aprovadaEm, janela.inicio), lt(schema.vendas.aprovadaEm, janela.fim)),
     and(gte(schema.vendas.reembolsadaEm, janela.inicio), lt(schema.vendas.reembolsadaEm, janela.fim)),
-    eq(schema.vendas.status, "pendente"),
-    // reserva retida: aprovadas antes da janela e ainda não liberadas
-    and(eq(schema.vendas.status, "aprovada"), isNull(schema.vendas.reservaLiberadaEm), lt(schema.vendas.aprovadaEm, janela.fim)),
+    and(eq(schema.vendas.status, "pendente"), gte(schema.vendas.criadaEm, new Date(janela.inicio.getTime() - 7 * 86_400_000))),
+    // reserva retida: aprovadas desde o marco zero, antes do fim da janela e ainda não liberadas
+    and(eq(schema.vendas.status, "aprovada"), isNull(schema.vendas.reservaLiberadaEm), gte(schema.vendas.aprovadaEm, MARCO_PADRAO), lt(schema.vendas.aprovadaEm, janela.fim)),
   )), 10000, "vendas");
   return rows.map((r) => ({
     id: r.id, fonte: r.fonte, idOrigem: r.idOrigem, status: r.status, criadaEm: r.criadaEm, aprovadaEm: r.aprovadaEm,
@@ -102,12 +103,18 @@ export async function montarEntrada(periodo: Periodo, op: OpcoesConsulta): Promi
   return { periodo, parametros, vendas, lancamentos, manuais, opcoes: { ...op, cambio, marcoZero: mz } };
 }
 
+/** Usado por /api/resumo e testes (fora do cache do Next): mesma entrada agregada, só com a memória da instância. */
 export async function calcularPeriodoComAnterior(periodo: Periodo, op: OpcoesConsulta): Promise<{ atual: ResultadoDRE; anterior: ResultadoDRE; temBaseAnterior: boolean }> {
   const ant = periodoAnterior(periodo, op.tz);
-  const [ea, eb] = await Promise.all([montarEntrada(periodo, op), montarEntrada(ant, op)]);
-  const atual = calcularDRE(ea);
-  const anterior = calcularDRE(eb);
-  const temBaseAnterior = eb.vendas.length + eb.lancamentos.length > 0 || anterior.totais.custosTotais > 0;
+  const janela = janelaUnica({ inicio: new Date(Math.min(periodo.inicio.getTime(), ant.inicio.getTime())), fim: periodo.fim });
+  const [parametros, v, l, manuais, cambio] = await Promise.all([
+    carregarParametros(), vendasAgregadas(janela.inicio, janela.fim), lancamentosAgregados(janela.inicio, janela.fim), carregarManuais(), carregarCambio(),
+  ]);
+  const mz = parametroVigente(parametros, "marco_zero", new Date());
+  const e: Entrada = { periodo: janela, parametros, vendas: paraVendasCalc(v), lancamentos: paraLancamentosCalc(l), manuais, opcoes: { ...op, cambio, marcoZero: mz ? new Date(mz.valor) : MARCO_PADRAO } };
+  const atual = calcularDRE({ ...e, periodo });
+  const anterior = calcularDRE({ ...e, periodo: ant });
+  const temBaseAnterior = anterior.totais.numVendas > 0 || anterior.totais.custosTotais > 0;
   return { atual, anterior, temBaseAnterior };
 }
 
@@ -149,52 +156,6 @@ export function janelaCache(j: Periodo): Periodo {
 type Serial<T> = T extends Date ? string : T extends (infer U)[] ? Serial<U>[] : T extends object ? { [K in keyof T]: Serial<T[K]> } : T;
 const dataOuNull = (s: string | null) => (s ? new Date(s) : null);
 
-/** Leituras pesadas com cache de 60 s compartilhado (Data Cache), invalidado por `revalidateTag("dados")` em toda gravação. */
-const vendasCache = unstable_cache((ini: string, fim: string) => lembrar(`vendas:${ini}:${fim}`, async () => {
-  const rows = await carregarVendas({ inicio: new Date(ini), fim: new Date(fim) });
-  return rows.map((v) => ({ ...v, criadaEm: v.criadaEm?.toISOString() ?? null, aprovadaEm: v.aprovadaEm?.toISOString() ?? null, reembolsadaEm: v.reembolsadaEm?.toISOString() ?? null, reservaLiberadaEm: v.reservaLiberadaEm?.toISOString() ?? null }));
-}, { ttlMs: 30_000, swr: true, rotulo: "vendas" }), ["vendas"], { revalidate: 60, tags: [TAG_DADOS] });
-/**
- * Lançamentos em pedaços de UM DIA (Brasília) no cache compartilhado: dias passados ficam 6 h sem voltar ao banco (tag "dados-historico",
- * invalidada só por importação/recuperação); hoje e ontem seguem a tag "dados" (toda coleta). Cada coleta relê 2 dias, não o período inteiro,
- * e cada pedaço fica pequeno o bastante para o Data Cache da Vercel guardar. A memória da instância guarda a janela já montada.
- */
-export const TAG_HISTORICO = "dados-historico";
-const TZ_DIA = process.env.APP_TZ ?? "America/Sao_Paulo";
-const ANCORA_BLOCO = "2026-10-03"; // marco zero: os blocos de 7 dias começam aqui
-async function lerLancamentosDias(dia: string, dias: number): Promise<Serial<LancamentoCalc>[]> {
-  const inicio = fromZonedTime(`${dia}T00:00:00`, TZ_DIA), fim = fromZonedTime(`${somarDias(dia, dias)}T00:00:00`, TZ_DIA);
-  return (await carregarLancamentos({ inicio, fim })).map((x) => ({ ...x, instante: x.instante.toISOString() }));
-}
-const lancDiaRecente = unstable_cache((dia: string) => lerLancamentosDias(dia, 1), ["lanc-dia-recente"], { revalidate: 60, tags: [TAG_DADOS] });
-const lancDiaAntigo = unstable_cache((dia: string) => lerLancamentosDias(dia, 1), ["lanc-dia-antigo"], { revalidate: 6 * 3600, tags: [TAG_HISTORICO] });
-const lancBlocoAntigo = unstable_cache((dia: string) => lerLancamentosDias(dia, 7), ["lanc-bloco-antigo"], { revalidate: 6 * 3600, tags: [TAG_HISTORICO] });
-function somarDias(dia: string, n: number): string { const d = new Date(`${dia}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
-const difDias = (a: string, b: string) => Math.round((new Date(`${b}T12:00:00Z`).getTime() - new Date(`${a}T12:00:00Z`).getTime()) / 86_400_000);
-/** Pedaços que cobrem a janela: blocos de 7 dias inteiramente passados; dias soltos no bloco atual (antigos ou recentes = hoje/ontem). */
-export function pedacosDaJanela(inicio: Date, fim: Date, hoje: string, tz = TZ_DIA): { tipo: "bloco" | "dia-antigo" | "dia-recente"; dia: string }[] {
-  const ontem = somarDias(hoje, -1);
-  const primeiro = formatInTimeZone(inicio, tz, "yyyy-MM-dd"), ultimo = formatInTimeZone(new Date(fim.getTime() - 1), tz, "yyyy-MM-dd");
-  const out: { tipo: "bloco" | "dia-antigo" | "dia-recente"; dia: string }[] = [];
-  let bloco = somarDias(ANCORA_BLOCO, Math.floor(difDias(ANCORA_BLOCO, primeiro) / 7) * 7);
-  for (let i = 0; i < 60 && bloco <= ultimo; i++, bloco = somarDias(bloco, 7)) {
-    const fimBloco = somarDias(bloco, 7); // exclusivo
-    if (fimBloco <= ontem && bloco >= primeiro) { out.push({ tipo: "bloco", dia: bloco }); continue; }
-    for (let d = bloco < primeiro ? primeiro : bloco; d < fimBloco && d <= ultimo; d = somarDias(d, 1)) out.push({ tipo: d >= ontem ? "dia-recente" : "dia-antigo", dia: d });
-  }
-  return out;
-}
-async function lancamentosPorDias(ini: string, fim: string): Promise<Serial<LancamentoCalc>[]> {
-  const hoje = formatInTimeZone(new Date(), TZ_DIA, "yyyy-MM-dd");
-  // no máximo 2 pedaços por vez: o banco do plano grátis engasga com muitas consultas simultâneas (10/11 à tarde: "Dado indisponível" logo após o deploy)
-  const pedacos = pedacosDaJanela(new Date(ini), new Date(fim), hoje);
-  const partes: Serial<LancamentoCalc>[][] = [];
-  for (let i = 0; i < pedacos.length; i += 2) {
-    partes.push(...(await Promise.all(pedacos.slice(i, i + 2).map((p) => p.tipo === "bloco" ? lancBlocoAntigo(p.dia) : p.tipo === "dia-antigo" ? lancDiaAntigo(p.dia) : lancDiaRecente(p.dia)))));
-  }
-  return partes.flat().filter((x) => x.instante >= ini && x.instante < fim);
-}
-const lancamentosCache = (ini: string, fim: string) => lembrar(`lancamentos:${ini}:${fim}`, () => lancamentosPorDias(ini, fim), { ttlMs: 30_000, swr: true, rotulo: "lançamentos" });
 const TTL_PEQUENO = 10 * 60_000; // parâmetros, categorias, manuais e câmbio: pequenos e quase não mudam
 export const PRAZO_PAGINA_MS = 6000; // consulta que alimenta tela: 6 s; passou disso, mostra o último valor bom (memória) ou o esqueleto
 const parametrosCache = unstable_cache(() => lembrar("parametros", async () => (await carregarParametros()).map((p) => ({ ...p, vigenciaInicio: p.vigenciaInicio.toISOString(), vigenciaFim: p.vigenciaFim?.toISOString() ?? null })), { ttlMs: TTL_PEQUENO, swr: true, vazioEhErro: true, rotulo: "parâmetros" }), ["parametros"], { revalidate: 60, tags: [TAG_DADOS] });
@@ -213,11 +174,6 @@ export async function carregarCambioCache(): Promise<CambioFn> { return cambioDe
 export async function carregarParametrosCache(): Promise<Parametro[]> {
   return (await parametrosCache()).map((p) => ({ ...p, vigenciaInicio: new Date(p.vigenciaInicio), vigenciaFim: dataOuNull(p.vigenciaFim) }));
 }
-/** Lançamentos da janela (arredondada a 10 min) pelo mesmo cache que alimenta o cálculo: a mesma leitura serve a inicial, o DRE e as campanhas. */
-export async function carregarLancamentosCache(janelaPedida: Periodo): Promise<LancamentoCalc[]> {
-  const j = janelaCache(janelaPedida);
-  return (await lancamentosCache(j.inicio.toISOString(), j.fim.toISOString())).map((l) => ({ ...l, instante: new Date(l.instante) }));
-}
 export async function carregarCategoriasCache() { return categoriasCache(); }
 
 function cambioDeLinhas(rows: { dia: string; par: string; taxa: number }[]): CambioFn {
@@ -231,9 +187,23 @@ function cambioDeLinhas(rows: { dia: string; par: string; taxa: number }[]): Cam
   };
 }
 
-/** Entrada ampla (uma leitura só, com cache) para calcular vários períodos: parâmetros, vendas, lançamentos, manuais e câmbio em paralelo. */
+/**
+ * Entrada para o cálculo com UMA janela para todas as telas: do marco zero (ou antes, se o período pedir histórico) até agora
+ * (arredondado a 10 min). Vendas e lançamentos vêm AGREGADOS (src/lib/agregados.ts): uma consulta de cada por janela, e a mesma
+ * janela serve a inicial, a barra Hoje, o aquecimento e o /api/resumo — por isso cada coleta lê cada tabela uma vez só.
+ * Memória da instância primeiro (30 s, atualiza por trás), Data Cache compartilhado por trás dela.
+ */
+const entradaAgregadaCache = unstable_cache(async (ini: string, fim: string) => {
+  const [vendas, lancamentos] = await Promise.all([vendasAgregadas(new Date(ini), new Date(fim)), lancamentosAgregados(new Date(ini), new Date(fim))]);
+  return { vendas: vendas.map((v) => ({ ...v, criadaEm: v.criadaEm?.toISOString() ?? null, aprovadaEm: v.aprovadaEm?.toISOString() ?? null, reembolsadaEm: v.reembolsadaEm?.toISOString() ?? null })),
+    lancamentos: lancamentos.map((l) => ({ ...l, instante: l.instante.toISOString() })) };
+}, ["entrada-agregada"], { revalidate: 60, tags: [TAG_DADOS] });
+export function janelaUnica(pedida: Periodo): Periodo {
+  const j = janelaCache(pedida);
+  return { inicio: new Date(Math.min(MARCO_PADRAO.getTime(), j.inicio.getTime())), fim: new Date(Math.max(j.fim.getTime(), janelaCache({ inicio: new Date(), fim: new Date() }).fim.getTime())) };
+}
 export async function montarEntradaAmpla(janelaPedida: Periodo, op: OpcoesConsulta, problemas: string[]): Promise<Entrada> {
-  const janela = janelaCache(janelaPedida);
+  const janela = janelaUnica(janelaPedida);
   const seguro = async <T,>(p: Promise<T>, padrao: T, rotulo: string): Promise<T> => {
     try { return await p; } catch (e) {
       console.error(`[dados] ${rotulo} falhou:`, e); // detalhe só no log
@@ -245,20 +215,19 @@ export async function montarEntradaAmpla(janelaPedida: Periodo, op: OpcoesConsul
   const ini = janela.inicio.toISOString(), fim = janela.fim.toISOString();
   // parâmetros primeiro e sozinhos: são obrigatórios e minúsculos; não podem esperar na fila atrás das leituras grandes
   const parametrosS = await parametrosCache().catch((e) => { console.error("[dados] parâmetros indisponíveis:", e); throw new Error("parâmetros indisponíveis: o banco demorou a responder e não há cópia na memória; tente de novo em instantes"); });
-  const [vendasS, lancamentosS, manuaisS, cambioS] = await Promise.all([
-    seguro(vendasCache(ini, fim), [] as Serial<VendaCalc>[], "vendas"),
-    seguro(lancamentosCache(ini, fim), [] as Serial<LancamentoCalc>[], "lançamentos"),
+  const [agregados, manuaisS, cambioS] = await Promise.all([
+    seguro(lembrar(`entrada:${ini}:${fim}`, () => entradaAgregadaCache(ini, fim), { ttlMs: 30_000, swr: true, rotulo: "vendas e lançamentos" }), null, "vendas e lançamentos"),
     seguro(manuaisCache(), [] as Serial<ManualCalc>[], "lançamentos manuais"),
     seguro(cambioCache(), [] as { dia: string; par: string; taxa: number }[], "câmbio"),
   ]);
   if (parametrosS.length === 0) throw new Error("parâmetros indisponíveis: a consulta voltou vazia");
   const parametros: Parametro[] = parametrosS.map((p) => ({ ...p, vigenciaInicio: new Date(p.vigenciaInicio), vigenciaFim: dataOuNull(p.vigenciaFim) }));
-  const vendas: VendaCalc[] = vendasS.map((v) => ({ ...v, criadaEm: dataOuNull(v.criadaEm), aprovadaEm: dataOuNull(v.aprovadaEm), reembolsadaEm: dataOuNull(v.reembolsadaEm), reservaLiberadaEm: dataOuNull(v.reservaLiberadaEm) }));
-  const lancamentos: LancamentoCalc[] = lancamentosS.map((l) => ({ ...l, instante: new Date(l.instante) }));
+  const vendas: VendaCalc[] = paraVendasCalc((agregados?.vendas ?? []).map((v) => ({ ...v, criadaEm: dataOuNull(v.criadaEm), aprovadaEm: dataOuNull(v.aprovadaEm), reembolsadaEm: dataOuNull(v.reembolsadaEm) })));
+  const lancamentos: LancamentoCalc[] = paraLancamentosCalc((agregados?.lancamentos ?? []).map((l) => ({ ...l, instante: new Date(l.instante) })));
   const manuais: ManualCalc[] = manuaisS.map((m) => ({ ...m, comecaEm: new Date(m.comecaEm), terminaEm: dataOuNull(m.terminaEm) }));
   const cambio = cambioDeLinhas(cambioS);
   const mz = parametroVigente(parametros, "marco_zero", new Date());
-  return { periodo: janela, parametros, vendas, lancamentos, manuais, opcoes: { ...op, cambio, marcoZero: mz ? new Date(mz.valor) : new Date("2026-10-03T03:00:00Z") } };
+  return { periodo: janela, parametros, vendas, lancamentos, manuais, opcoes: { ...op, cambio, marcoZero: mz ? new Date(mz.valor) : MARCO_PADRAO } };
 }
 
 export { lte, db };

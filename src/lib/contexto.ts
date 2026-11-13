@@ -22,11 +22,12 @@ export async function contextoPeriodo(sp: Params) {
   // 2ª passada: marco zero real (vem dos parâmetros) e recorte definitivo
   estado = lerPeriodo(sp, entrada.opcoes.marcoZero);
   const calc = (p: Periodo) => calcularDRE({ ...entrada, periodo: p, opcoes: { ...entrada.opcoes, ...op } });
+  const funil = (p: Periodo) => funilDoPeriodo(entrada, p, op.incluirHistorico);
   const atual = calc(estado.periodo);
   const anterior = calc(estado.anterior);
   const temBaseAnterior = temDados(entrada, estado.anterior, op.incluirHistorico);
   const taxaMxn = entrada.opcoes.cambio("MXNBRL", estado.agora);
-  return { estado, atual, anterior, temBaseAnterior, coletas, taxaMxn, params: entrada.parametros, sessao, entrada, calc, temDados: (p: Periodo) => temDados(entrada, p, op.incluirHistorico), problemas, propsSeletor: propsSeletor(estado, sessao.papel === "edita") };
+  return { estado, atual, anterior, temBaseAnterior, coletas, taxaMxn, funil, funilAtual: funil(estado.periodo), funilAnterior: funil(estado.anterior), params: entrada.parametros, sessao, entrada, calc, temDados: (p: Periodo) => temDados(entrada, p, op.incluirHistorico), problemas, propsSeletor: propsSeletor(estado, sessao.papel === "edita") };
 }
 
 /** Há base de comparação? Só com dado que ENTRA no cálculo: sem "incluir histórico", nada antes do marco zero conta. */
@@ -54,3 +55,20 @@ export function propsSeletor(e: EstadoPeriodo, podeSalvar: boolean) {
 }
 
 export const _tipos = { parametroVigente, numeroVigente } as { parametroVigente: typeof parametroVigente; numeroVigente: typeof numeroVigente; _p?: Parametro };
+
+export type Funil = { geradas: number; pendentesQtd: number; pendentesValor: number; aprovadas: number; conversao: number | null };
+/**
+ * Funil de vendas do período (13/11), na definição da "Taxa de aprovação" da Zenith: geradas = vendas CRIADAS no período,
+ * qualquer status (aprovada, pendente, reembolsada, cancelada pela Zenith); aprovadas = aprovadas no período (o mesmo "Nº de vendas");
+ * conversão = aprovadas ÷ geradas. Pendentes = criadas no período e ainda pendentes (quantidade e líquido). Duplicadas anuladas não contam.
+ */
+export function funilDoPeriodo(e: Entrada, p: Periodo, incluirHistorico: boolean): Funil {
+  const conta = (h: boolean) => incluirHistorico || !h;
+  const dentroP = (d: Date | null) => !!d && d >= p.inicio && d < p.fim;
+  const q = (v: { quantidade?: number }) => v.quantidade ?? 1;
+  const criadas = e.vendas.filter((v) => conta(v.historico) && dentroP(v.criadaEm));
+  const geradas = criadas.reduce((s, v) => s + q(v), 0);
+  const pend = criadas.filter((v) => v.status === "pendente");
+  const aprovadas = e.vendas.filter((v) => conta(v.historico) && dentroP(v.aprovadaEm) && v.status !== "pendente" && v.status !== "cancelada").reduce((s, v) => s + q(v), 0);
+  return { geradas, pendentesQtd: pend.reduce((s, v) => s + q(v), 0), pendentesValor: pend.reduce((s, v) => s + v.liquidoBrl, 0), aprovadas, conversao: geradas > 0 ? aprovadas / geradas : null };
+}

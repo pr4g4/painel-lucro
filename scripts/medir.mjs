@@ -5,7 +5,7 @@ const b = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-124
 const c = await b.newContext({ ...devices["iPhone 13"], locale: "pt-BR" }); const p = await c.newPage();
 await p.goto("http://localhost:3000/login"); await p.waitForLoadState("networkidle"); await p.waitForTimeout(500);
 await p.fill('input[name=usuario]', "erick"); await p.fill('input[name=senha]', "erick123"); await p.tap("button:has-text('Entrar')"); await p.waitForURL("http://localhost:3000/");
-const paginas = [["/", ".hero-ini .hero-v, .hero .hero-v"], ["/dre", "h1:has-text(\"DRE do período\")"], ["/avisos", "h1"], ["/campanhas", "table.tab"], ["/detalhes", ".hero .hero-v"]];
+const paginas = [["/", ".hero-ini .hero-v"], ["/avisos", "h1"], ["/importar", "h1"], ["/parametros", "h1"]];
 const so = (process.env.ROTAS ?? "").split(",").filter(Boolean); // ROTAS=/,/dre mede só essas
 const linhas = [];
 for (const [rota, numeros] of paginas.filter(([r]) => !so.length || so.includes(r))) {

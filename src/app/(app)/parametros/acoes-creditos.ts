@@ -25,6 +25,6 @@ export async function registrarCreditoOpenAI(_prev: { ok?: boolean; mensagem?: s
     valorOriginal: String(valor), moeda: "USD", valorBrl: "0", taxaCambio: "0", historico: false, estimado: false, payload: { usuario: s.usuario },
   }).onConflictDoUpdate({ target: schema.lancamentos.chaveNatural, set: { valorOriginal: String(valor), coletadoEm: new Date() } }));
   await verificarSaldos().catch(() => {});
-  revalidatePath("/"); invalidarDados(); revalidatePath("/resumo"); revalidatePath("/avisos");
+  revalidatePath("/"); invalidarDados(); revalidatePath("/avisos");
   return { ok: true, mensagem: tipo === "saldo_ref" ? `Referência gravada: ${fmtUSD(valor)}.` : `Recarga de ${fmtUSD(valor)} registrada (não entra como custo).` };
 }

@@ -4,6 +4,7 @@ import { dentro } from "./periodo";
 import { valorBrlNoPeriodo } from "./recorrentes";
 
 const soma = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+const qtd = (xs: { quantidade?: number }[]) => soma(xs.map((x) => x.quantidade ?? 1)); // linhas agregadas valem por várias
 const div = (a: number, b: number) => (b === 0 ? null : a / b);
 
 /**
@@ -111,7 +112,7 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
   const impostoLucro = Math.max(0, baseValor) * (impostoPct / 100);
   const lucroLiquido = lucroBruto - impostoLucro;
 
-  const numVendas = aprovadasNoPeriodo.length;
+  const numVendas = qtd(aprovadasNoPeriodo);
 
   // ---------- Por produto ----------
   const comProduto = aprovadasNoPeriodo.filter((v) => v.produto);
@@ -123,11 +124,11 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
     const g = new Map<string, { qtd: number; receita: number }>();
     for (const v of comProduto) {
       const cur = g.get(v.produto!) ?? { qtd: 0, receita: 0 };
-      cur.qtd++; cur.receita += v.liquidoBrl; g.set(v.produto!, cur);
+      cur.qtd += v.quantidade ?? 1; cur.receita += v.liquidoBrl; g.set(v.produto!, cur);
     }
     porProduto = [...g.entries()].map(([produto, x]) => ({ produto, qtd: x.qtd, receitaLiquida: x.receita, ticketMedio: x.receita / x.qtd }))
       .sort((a, b) => b.receitaLiquida - a.receitaLiquida);
-    if (comProduto.length < numVendas) avisos.push(`${numVendas - comProduto.length} venda(s) sem produto informado ficaram fora de "Vendas por produto".`);
+    if (qtd(comProduto) < numVendas) avisos.push(`${numVendas - qtd(comProduto)} venda(s) sem produto informado ficaram fora de "Vendas por produto".`);
   }
 
   // ---------- Linhas da DRE ----------
@@ -139,7 +140,7 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
     L("taxa_zenith_pct", "(−) Taxa Zenith %", -taxaZenithPct, 1),
     L("taxa_zenith_fixa", "(−) Taxa fixa", -taxaZenithFixa, 1),
     L("cambio_zenith", "(−) Câmbio Zenith", -cambioZenith, 1),
-    L("reembolsos", "(−) Reembolsos / chargebacks", -reembolsos, 1, { extra: { qtd: reembolsadasNoPeriodo.length } }),
+    L("reembolsos", "(−) Reembolsos / chargebacks", -reembolsos, 1, { extra: { qtd: qtd(reembolsadasNoPeriodo) } }),
     L("receita_liquida", "Receita líquida", receitaLiquida, 0, { destaque: true }),
     L("meta_exibido", "(−) Meta exibido", -metaExibido, 1, {
       filhos: [
@@ -167,7 +168,7 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
     L("lucro_liquido", "Lucro líquido", lucroLiquido, 0, { destaque: true }),
     L("por_socio", "Metade para cada sócio", lucroLiquido / 2, 1),
     L("reserva_retida", "Reserva retida na Zenith (informativo)", reservaRetida, 1, { informativo: true }),
-    L("pendentes", "Vendas pendentes (informativo)", pendentesValor, 1, { informativo: true, extra: { qtd: pendentes.length } }),
+    L("pendentes", "Vendas pendentes (informativo)", pendentesValor, 1, { informativo: true, extra: { qtd: qtd(pendentes) } }),
   ];
 
   return {
@@ -177,7 +178,7 @@ export function calcularDRE(e: Entrada): ResultadoDRE {
       receitaBrutaMxn, receitaBrutaBrl, taxaZenithPct, taxaZenithFixa, cambioZenith, reembolsos, receitaLiquida,
       metaExibido, metaImposto, metaComImposto, tiktokExibido, tiktokImposto, tiktokComImposto, anunciosComImposto, zapdata, ia: iaTotal, iaKie, iaOpenai, iaManual, operacao, entradasManuais,
       custosTotais, lucroBruto, impostoLucro, lucroLiquido, porSocio: lucroLiquido / 2,
-      reservaRetida, pendentesQtd: pendentes.length, pendentesValor, numVendas, numReembolsos: reembolsadasNoPeriodo.length,
+      reservaRetida, pendentesQtd: qtd(pendentes), pendentesValor, numVendas, numReembolsos: qtd(reembolsadasNoPeriodo),
     },
     indicadores: {
       roas: receitaLiquida > 0 ? div(receitaLiquida, anunciosComImposto) : null,

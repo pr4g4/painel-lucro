@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-const ROTAS = ["/", "/detalhes", "/dre", "/campanhas", "/avisos", "/pedidos"];
+const ROTAS = ["/", "/avisos", "/importar", "/parametros"];
 
 /** Quando o navegador estiver ocioso, pré-carrega a casca das outras telas (o Next busca só o esqueleto das rotas dinâmicas). */
 export function PrefetchOcioso() {

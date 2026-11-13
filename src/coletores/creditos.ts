@@ -5,7 +5,10 @@ import { unstable_cache } from "next/cache";
 import { saldoKie, saldoOpenAI, alertaSaldo, numeroVigente, inicioDoDia, type LancamentoCalc, type SaldoIA, type Parametro } from "@/lib/calculo";
 import { abrirAviso, resolverAvisos } from "./base";
 
-function paraCalc(l: typeof schema.lancamentos.$inferSelect): LancamentoCalc {
+// só as colunas que o cálculo de saldo usa (sem payload: saída de rede do Supabase)
+const L = schema.lancamentos;
+const COLS = { id: L.id, fonte: L.fonte, tipo: L.tipo, instante: L.instante, granularidade: L.granularidade, descricao: L.descricao, valorBrl: L.valorBrl, valorOriginal: L.valorOriginal, moeda: L.moeda, contaId: L.contaId, campanhaId: L.campanhaId, modelo: L.modelo, historico: L.historico, estimado: L.estimado };
+function paraCalc(l: { id: number; fonte: string; tipo: string; instante: Date; granularidade: string; descricao: string; valorBrl: string; valorOriginal: string; moeda: string; contaId: string | null; campanhaId: string | null; modelo: string | null; historico: boolean; estimado: boolean }): LancamentoCalc {
   return { id: l.id, fonte: l.fonte, tipo: l.tipo, instante: l.instante, granularidade: l.granularidade, descricao: l.descricao, valorBrl: Number(l.valorBrl), valorOriginal: Number(l.valorOriginal), moeda: l.moeda, contaId: l.contaId, campanhaId: l.campanhaId, modelo: l.modelo, frente: null, historico: l.historico, estimado: l.estimado };
 }
 
@@ -23,9 +26,10 @@ export async function carregarCreditos(_agora = new Date(), tz = "America/Sao_Pa
 async function carregarCreditosBruto(agora: Date, tz: string): Promise<{ kie: SaldoIA; openai: SaldoIA; limites: { horas: number; usd: number } }> {
   const desde = new Date(agora.getTime() - 7 * 86_400_000);
   const [recentes, refs, params] = await Promise.all([
-    executar((d) => d.select().from(schema.lancamentos).where(and(inArray(schema.lancamentos.fonte, ["kie", "openai"]), gte(schema.lancamentos.instante, desde))), 15000, "créditos"),
+    // OpenAI: 7 dias (uso desde a última referência); kie.ai: 24 h bastam (uso de hoje e ritmo de 3 h; a leitura de saldo vem em `refs`)
+    executar((d) => d.select(COLS).from(schema.lancamentos).where(or(and(eq(schema.lancamentos.fonte, "openai"), gte(schema.lancamentos.instante, desde)), and(eq(schema.lancamentos.fonte, "kie"), gte(schema.lancamentos.instante, new Date(agora.getTime() - 24 * 3_600_000))))), 15000, "créditos"),
     // última referência/leitura mesmo que antiga
-    executar((d) => d.select().from(schema.lancamentos).where(or(and(eq(schema.lancamentos.fonte, "openai"), eq(schema.lancamentos.tipo, "saldo_ref")), and(eq(schema.lancamentos.fonte, "kie"), eq(schema.lancamentos.tipo, "saldo_ia")))).orderBy(desc(schema.lancamentos.instante)).limit(50), 15000, "referências"),
+    executar((d) => d.select(COLS).from(schema.lancamentos).where(or(and(eq(schema.lancamentos.fonte, "openai"), eq(schema.lancamentos.tipo, "saldo_ref")), and(eq(schema.lancamentos.fonte, "kie"), eq(schema.lancamentos.tipo, "saldo_ia")))).orderBy(desc(schema.lancamentos.instante)).limit(50), 15000, "referências"),
     executar((d) => d.select().from(schema.parametros), 10000, "parâmetros"),
   ]);
   const vistos = new Set(recentes.map((r) => r.id));

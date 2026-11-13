@@ -33,6 +33,7 @@ export type VendaCalc = {
   reservaLiberadaEm: Date | null;
   historico: boolean;
   metodo?: string | null; // oxxo | spei | … (do payload), para o prazo de expiração do pendente
+  quantidade?: number; // linha agregada: quantas vendas iguais ela representa (padrão 1)
 };
 
 export type LancamentoCalc = {
@@ -51,6 +52,7 @@ export type LancamentoCalc = {
   frente: string | null; // nome da frente (já resolvido pela campanha)
   historico: boolean;
   estimado: boolean;
+  quantidade?: number; // linha agregada: quantos lançamentos ela soma (padrão 1)
 };
 
 export type Frequencia = "unica" | "diaria" | "semanal" | "mensal" | "trimestral" | "semestral" | "anual";

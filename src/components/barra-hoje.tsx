@@ -24,14 +24,14 @@ export async function BarraHoje({ webhookZenithRejeitado = false }: { webhookZen
           <span className="bh-k">Lucro líquido{incompleto && <span className="bh-incompleto">incompleto</span>}</span>
           <span className={`bh-v num ${t ? (t.lucroLiquido >= 0 ? "pos" : "neg") : ""}`}>{t ? fmtBRL(t.lucroLiquido) : "—"}</span>
         </Link>
-        <Link href="/dre?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">Receita líq.</span><span className="bh-v num">{t ? fmtBRL(t.receitaLiquida) : "—"}</span></Link>
-        <Link href="/campanhas?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">{t && t.tiktokComImposto > 0 ? "Anúncios c/ imp." : "Meta c/ imp."}</span><span className="bh-v num">{t ? fmtBRL(t.anunciosComImposto) : "—"}</span></Link>
-        <Link href="/custos?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">IA</span><span className="bh-v num">{t ? fmtBRL(t.ia) : "—"}</span></Link>
-        <Link href="/detalhes#creditos" prefetch={false} className="bh-item" title={d.kie?.indisponivel ?? ""}>
+        <Link href="/?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">Receita líq.</span><span className="bh-v num">{t ? fmtBRL(t.receitaLiquida) : "—"}</span></Link>
+        <Link href="/?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">{t && t.tiktokComImposto > 0 ? "Anúncios c/ imp." : "Meta c/ imp."}</span><span className="bh-v num">{t ? fmtBRL(t.anunciosComImposto) : "—"}</span></Link>
+        <Link href="/?p=hoje" prefetch={false} className="bh-item"><span className="bh-k">IA</span><span className="bh-v num">{t ? fmtBRL(t.ia) : "—"}</span></Link>
+        <Link href="/parametros#creditos" prefetch={false} className="bh-item" title={d.kie?.indisponivel ?? ""}>
           <span className="bh-k"><i className="bh-luz" style={{ background: COR[sk] }} />kie.ai</span>
           <span className="bh-v num">{d.kie?.saldoUsd != null ? usd(d.kie.saldoUsd) + horas(d.kie.horasRestantes) : "—"}</span>
         </Link>
-        <Link href="/detalhes#creditos" prefetch={false} className="bh-item" title={d.openai?.indisponivel ?? "estimado"}>
+        <Link href="/parametros#creditos" prefetch={false} className="bh-item" title={d.openai?.indisponivel ?? "estimado"}>
           <span className="bh-k"><i className="bh-luz" style={{ background: COR[so] }} />OpenAI<span className="text-ink-3"> est.</span></span>
           <span className="bh-v num">{d.openai?.saldoUsd != null ? usd(d.openai.saldoUsd) + horas(d.openai.horasRestantes) : "—"}</span>
         </Link>

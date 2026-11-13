@@ -6,7 +6,7 @@ import { carregarCreditos } from "@/coletores/creditos";
 import { avisosAbertos } from "@/lib/dados";
 import { fontesAtrasadas } from "@/lib/hoje";
 import { diaBrasilia } from "@/coletores/base";
-import { fmtMoeda, fmtUSD, fmtHorasRestantes } from "@/lib/formato";
+import { fmtMoeda, fmtUSD, fmtHorasRestantes, fmtPctSimples } from "@/lib/formato";
 import { SeletorCompacto } from "@/components/seletor-compacto";
 import { NumeroAnimado } from "@/components/numero-animado";
 import { StatusLinha } from "@/components/status-linha";
@@ -20,7 +20,7 @@ import type { Params } from "@/lib/periodo-url";
 
 export const dynamic = "force-dynamic";
 
-/** Página inicial: só o essencial. Tudo o mais fica em /detalhes (mesmos números). */
+/** Página inicial: a única tela de números do painel (13/11). */
 export default async function Inicio({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = await searchParams;
   // créditos e avisos não dependem do período: começam junto com o contexto (uma ida ao banco a menos quando a memória está fria)
@@ -31,6 +31,7 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
   const { estado, atual, anterior, temBaseAnterior, coletas, taxaMxn } = ctx;
   const [creditos, avisosAb] = await Promise.all([pCreditos, pAvisos]);
   const t = atual.totais, a = anterior.totais;
+  const fu = ctx.funilAtual, fa = ctx.funilAnterior;
   const money = (v: number | null | undefined) => fmtMoeda(v, estado.moeda, taxaMxn);
   const prefixo = estado.moeda === "MXN" ? "MX$ " : "R$ ";
   const emMoeda = (v: number) => (estado.moeda === "MXN" && taxaMxn ? v / taxaMxn : v);
@@ -92,6 +93,35 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
           {bloco("vendas", "Nº de vendas", t.numVendas, a.numVendas, false, true)}
         </section>
 
+        {/* funil do período (13/11): geradas, pendentes e conversão, na definição da "Taxa de aprovação" da Zenith */}
+        <section className="blocos blocos-3" aria-label="Funil de vendas do período">
+          {bloco("geradas", "Geradas", fu.geradas, fa.geradas, false, true)}
+          {(() => {
+            const v = textoVariacao(fu.pendentesQtd, fa.pendentesQtd, temBaseAnterior, "int", estado.moeda, taxaMxn);
+            const corpo = v.texto.replace(/^[+-]/, "").replace(" vs. anterior", "");
+            return (
+              <div className="bloco" key="pendentes">
+                <div className="bloco-k">Pendentes</div>
+                <div className="bloco-v"><NumeroAnimado chave="pendentes" valor={fu.pendentesQtd} texto={String(fu.pendentesQtd)} casas={0} prefixo="" /><span className="bloco-v-sub num"> · {money(fu.pendentesValor)}</span></div>
+                <div className={`bloco-s num ${v.bom == null ? "" : v.bom ? "neg" : "pos"}`} title={v.texto}>{!v.texto ? "" : v.bom == null ? `= ${corpo}` : `${v.texto.startsWith("+") ? "▲" : "▼"} ${corpo}`}</div>
+              </div>
+            );
+          })()}
+          {(() => {
+            const atualPct = fu.conversao, antPct = fa.conversao;
+            const temBase = temBaseAnterior && antPct != null;
+            const v = textoVariacao(atualPct ?? 0, antPct, temBase, "pct", estado.moeda, taxaMxn);
+            const corpo = v.texto.replace(/^[+-]/, "").replace(" vs. anterior", "");
+            return (
+              <div className="bloco" key="conversao">
+                <div className="bloco-k" title="aprovadas ÷ geradas (como a Taxa de aprovação da Zenith)">Conversão</div>
+                <div className="bloco-v num">{atualPct == null ? "—" : fmtPctSimples(atualPct, 1)}</div>
+                <div className={`bloco-s num ${v.bom == null ? "" : v.bom ? "pos" : "neg"}`} title={v.texto}>{!v.texto ? "" : v.bom == null ? `= ${corpo}` : `${v.texto.startsWith("+") ? "▲" : "▼"} ${corpo}`}</div>
+              </div>
+            );
+          })()}
+        </section>
+
         <AreaAcumulado pontos={acum.pontos.map((p) => ({ rotulo: p.rotulo, acumulado: emMoeda(p.acumulado), valor: emMoeda(p.valor) }))} rotuloFim={rotuloFim} gran={acum.gran} moeda={estado.moeda} />
 
         {creditos && (
@@ -99,12 +129,11 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
             {[creditos.kie, creditos.openai].map((s) => {
               const baixo = !!alertaSaldo(s, creditos.limites);
               const nome = s.fonte === "kie" ? "kie.ai" : "OpenAI";
-              return <a key={s.fonte} href={`/detalhes?${query}#creditos`} className={`saldo-item ${baixo ? "saldo-baixo" : ""}`} title={s.indisponivel ?? (s.estimado ? "estimado" : "")}>{baixo ? "⚠ " : ""}{nome} {s.indisponivel ? "—" : fmtUSD(s.saldoUsd)}{s.horasRestantes != null ? <span className="text-ink-3"> · {fmtHorasRestantes(s.horasRestantes)}</span> : null}</a>;
+              return <a key={s.fonte} href="/parametros#creditos" className={`saldo-item ${baixo ? "saldo-baixo" : ""}`} title={s.indisponivel ?? (s.estimado ? "estimado" : "")}>{baixo ? "⚠ " : ""}{nome} {s.indisponivel ? "—" : fmtUSD(s.saldoUsd)}{s.horasRestantes != null ? <span className="text-ink-3"> · {fmtHorasRestantes(s.horasRestantes)}</span> : null}</a>;
             })}
           </div>
         )}
 
-        <a href={`/detalhes?${query}`} className="ver-detalhes">Ver detalhes <span aria-hidden>→</span></a>
       </div>
 
       <GuardarUltimoBom quando={formatInTimeZone(estado.agora, estado.tz, "dd/MM HH:mm")} periodo={ctx.propsSeletor.rotuloPeriodo} lucro={t.lucroLiquido} lucroTexto={money(t.lucroLiquido)} itens={[{ k: "receita", v: money(t.receitaLiquida) }, { k: "anúncios", v: money(t.anunciosComImposto) }, { k: "IA", v: money(t.ia) }, { k: "vendas", v: String(t.numVendas) }]} />

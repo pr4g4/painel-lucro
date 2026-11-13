@@ -164,3 +164,15 @@ Como medir de novo: `SIMULAR_LATENCIA_DB_MS=1000 npm start` e `node scripts/medi
 
 ## 13/11 — banco novo
 Supabase cortou o projeto antigo por saída de rede (23 GB). Mudança para o projeto novo `speijoncbtkhyqigebrc` (us-east-1) concluída; funções da Vercel movidas para `iad1` (mesma região do banco). Detalhes em docs/mudanca-de-banco.md. Acompanhar o "Egress" do projeto novo nos primeiros dias: esperado poucos MB por dia.
+
+## 13/11 (tarde) — consumo do banco novo e painel enxuto
+
+**Medido pelo Erick no pg_stat_statements:** a leitura de vendas (sem filtro, 2.809 linhas) rodava 8 vezes por coleta: ~650 MB/dia só do agendador, estourando os 5 GB em uma semana. Causas: a cláusula de "reserva retida" trazia todas as aprovadas; a janela mudava a cada 10 min (chave de cache nova a cada coleta); cada tela/aquecimento lia a própria janela.
+
+**Correção:** `src/lib/agregados.ts` lê vendas e lançamentos já somados no SQL (count/sum por pedaço de 1 h nas últimas 48 h e de 1 dia antes disso), e `montarEntradaAmpla` usa uma janela única (marco zero → agora) para todas as telas. O motor de cálculo recebe linhas com `quantidade` e não mudou de fórmula: `tests/agregados.test.ts` prova que lucro, receita, Meta, IA, nº de vendas, pendentes, reembolsos, reserva, funil e gráfico acumulado batem com o cálculo linha a linha nos períodos hoje, ontem, 7 dias e marco zero. Precisão: período personalizado que comece no meio de um dia com mais de 48 h fica com precisão de dia.
+
+**Linhas lidas por coleta (produção, estimativa com ~40 dias desde o marco):** vendas agregadas ~200–250, lançamentos agregados ~500–550, parâmetros ~25, lançamentos manuais ~10, câmbio ~45, coletas 6, avisos abertos ≤100, créditos ~300 (OpenAI 7 dias por hora + kie.ai 24 h), alertas ~5. Total ≈ 1.200 linhas pequenas (≈ 100 KB) por coleta → ≈ 15 MB/dia. Conferir no pg_stat_statements: a consulta `select status, moeda, historico, fonte, (case when criada_em ...` deve aparecer 1 vez por coleta.
+
+**Painel enxuto:** apagadas as telas Detalhes, DRE, Campanhas, Custos, Por produto, Pedidos, Lançamentos, Lançamentos manuais, Venda manual, Resumo e Gráficos, e os módulos de cálculo que só elas usavam (Profitfy, IA por venda, operação). Lançamentos manuais e créditos da OpenAI foram para /parametros. A coleta da Meta por campanha continua igual (custo e frente). Menu: Início · Avisos · Importar · Parâmetros.
+
+**Funil na inicial:** geradas (criadas no período, qualquer status, sem as duplicadas anuladas), pendentes (criadas no período e ainda pendentes: quantidade · líquido) e conversão (aprovadas ÷ geradas), todos com comparação com o período anterior.

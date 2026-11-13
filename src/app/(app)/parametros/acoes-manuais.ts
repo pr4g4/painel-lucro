@@ -36,14 +36,14 @@ async function gravarManual(form: FormData): Promise<EstadoGravar> {
   };
   if (id) await db.update(schema.lancamentosManuais).set(dados).where(eq(schema.lancamentosManuais.id, id));
   else await db.insert(schema.lancamentosManuais).values({ ...dados, criadoPor: s.usuarioId });
-  revalidatePath("/"); invalidarDados(); revalidatePath("/manuais"); revalidatePath("/dre");
+  revalidatePath("/"); invalidarDados(); revalidatePath("/parametros");
   return { ok: true, mensagem: id ? "Alteração salva." : `Lançamento gravado: ${dados.descricao}.` };
 }
 
 export async function excluirManual(form: FormData) {
   await exigirSessao("edita");
   await db.delete(schema.lancamentosManuais).where(eq(schema.lancamentosManuais.id, Number(form.get("id"))));
-  revalidatePath("/"); invalidarDados(); revalidatePath("/manuais");
+  revalidatePath("/"); invalidarDados(); revalidatePath("/parametros");
 }
 
 export async function salvarCategoria(form: FormData) {
@@ -54,7 +54,7 @@ export async function salvarCategoria(form: FormData) {
   const id = form.get("id") ? Number(form.get("id")) : null;
   if (id) await db.update(schema.categorias).set({ nome, linhaDre }).where(eq(schema.categorias.id, id));
   else await db.insert(schema.categorias).values({ nome, linhaDre }).onConflictDoNothing();
-  invalidarDados(); revalidatePath("/manuais");
+  invalidarDados(); revalidatePath("/parametros");
 }
 
 export async function excluirCategoria(form: FormData) {
@@ -62,5 +62,5 @@ export async function excluirCategoria(form: FormData) {
   const id = Number(form.get("id"));
   await db.update(schema.lancamentosManuais).set({ categoriaId: null }).where(eq(schema.lancamentosManuais.categoriaId, id));
   await db.delete(schema.categorias).where(eq(schema.categorias.id, id));
-  invalidarDados(); revalidatePath("/manuais");
+  invalidarDados(); revalidatePath("/parametros");
 }

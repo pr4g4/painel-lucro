@@ -1,7 +1,7 @@
 "use client";
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { registrarCreditoOpenAI } from "@/app/(app)/creditos/acoes";
+import { registrarCreditoOpenAI } from "@/app/(app)/parametros/acoes-creditos";
 
 export function FormCreditoOpenAI({ tz, agoraLocal }: { tz: string; agoraLocal: string }) {
   const [estado, acao, pendente] = useActionState(registrarCreditoOpenAI, undefined);
