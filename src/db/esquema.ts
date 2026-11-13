@@ -15,6 +15,7 @@ const ITENS: { migracao: string; item: string; existe: string; comando: string }
   { migracao: "0004_aporte_e_ads.sql", item: "coluna campanhas.orcamento_diario", existe: "select 1 from information_schema.columns where table_name = 'campanhas' and column_name = 'orcamento_diario'", comando: "ALTER TABLE campanhas ADD COLUMN IF NOT EXISTS orcamento_diario numeric(14, 2)" },
   { migracao: "0004_aporte_e_ads.sql", item: "coluna campanhas.orcamento_moeda", existe: "select 1 from information_schema.columns where table_name = 'campanhas' and column_name = 'orcamento_moeda'", comando: "ALTER TABLE campanhas ADD COLUMN IF NOT EXISTS orcamento_moeda text" },
   { migracao: "0005_orcamento_tipo.sql", item: "coluna campanhas.orcamento_tipo", existe: "select 1 from information_schema.columns where table_name = 'campanhas' and column_name = 'orcamento_tipo'", comando: "ALTER TABLE campanhas ADD COLUMN IF NOT EXISTS orcamento_tipo text" },
+  { migracao: "0006_resumos.sql", item: "tabela resumos", existe: "select 1 from information_schema.tables where table_name = 'resumos'", comando: "CREATE TABLE IF NOT EXISTS resumos (chave text PRIMARY KEY NOT NULL, calculado_em timestamp with time zone DEFAULT now() NOT NULL, dados jsonb NOT NULL)" },
   { migracao: "0004_aporte_e_ads.sql", item: "valor 'aporte' no enum tipo_manual", existe: "select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'tipo_manual' and e.enumlabel = 'aporte'", comando: "ALTER TYPE tipo_manual ADD VALUE IF NOT EXISTS 'aporte'" },
 ];
 

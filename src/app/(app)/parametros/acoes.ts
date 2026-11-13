@@ -1,4 +1,5 @@
 "use server";
+import { recalcularResumos } from "@/lib/resumos";
 import { and, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { invalidarDados } from "@/lib/cache";
@@ -19,7 +20,7 @@ export async function novaVigencia(form: FormData) {
     await tx.update(schema.parametros).set({ vigenciaFim: inicio }).where(and(eq(schema.parametros.chave, chave), isNull(schema.parametros.vigenciaFim)));
     await tx.insert(schema.parametros).values({ chave, valor, vigenciaInicio: inicio, observacao: String(form.get("observacao") || "") || null });
   });
-  invalidarDados(); revalidatePath("/parametros"); revalidatePath("/");
+  invalidarDados(); await recalcularResumos().catch(() => null); revalidatePath("/parametros"); revalidatePath("/");
 }
 
 export async function salvarFrente(form: FormData) {
@@ -39,7 +40,7 @@ export async function salvarFrente(form: FormData) {
     const f = frentes.find((fr) => { try { return new RegExp(fr.regraCampanha, "i").test(c.nome); } catch { return false; } });
     await db.update(schema.campanhas).set({ frenteId: f?.id ?? null }).where(eq(schema.campanhas.id, c.id));
   }
-  invalidarDados(); revalidatePath("/parametros");
+  invalidarDados(); await recalcularResumos().catch(() => null); revalidatePath("/parametros");
 }
 
 export async function trocarSenha(form: FormData) {
@@ -48,5 +49,5 @@ export async function trocarSenha(form: FormData) {
   const alvo = String(form.get("usuario") ?? s.usuario);
   if (alvo !== s.usuario && s.papel !== "edita") throw new Error("sem permissão");
   await db.update(schema.usuarios).set({ senhaHash: await gerarHash(nova) }).where(eq(schema.usuarios.usuario, alvo));
-  invalidarDados(); revalidatePath("/parametros");
+  invalidarDados(); await recalcularResumos().catch(() => null); revalidatePath("/parametros");
 }

@@ -54,6 +54,7 @@ Antes de começar, tenha à mão: seu login do GitHub (onde está o repositório
 
 ## Migrações posteriores (o app aplica sozinho; rodar à mão só se a faixa vermelha pedir)
 - 0005 (06/11): coluna `campanhas.orcamento_tipo` ("dia" ou "vitalicio").
+- 0006 (13/11): tabela `resumos` (resumos prontos da inicial).
 Desde 02/11 toda coleta começa conferindo o banco e aplica sozinha o que faltar (CREATE TABLE / ALTER ... IF NOT EXISTS). Só se o banco recusar aparece a faixa "Migração X pendente"; aí sim rode o arquivo abaixo no SQL Editor.
 - `drizzle/0001_zenith_eventos.sql` (tabela de eventos do webhook) — já rodou se o webhook funciona.
 - `drizzle/0002_indices_desempenho.sql` (índices; deixa as páginas rápidas): raw https://raw.githubusercontent.com/pr4g4/painel-lucro/main/drizzle/0002_indices_desempenho.sql → cole → Run.
@@ -86,14 +87,12 @@ As outras telas foram apagadas. Ficaram só as necessárias para os dados contin
 - Rotas de API: coleta, webhook e conferência da Zenith (`/api/zenith/eventos`), recuperação da Meta, `/api/resumo`, `/api/saude`, `/api/diagnostico`, `/api/aquecer`.
 
 ## Consumo do banco (por que o painel lê pouco)
-Vendas e lançamentos chegam ao cálculo **agregados no banco** (uma linha = várias vendas/lançamentos iguais da mesma hora, ou do mesmo dia quando com mais de 48 h), numa única janela (do marco zero até agora) que serve a inicial, a barra Hoje, o aquecimento e o /api/resumo. Cada coleta lê cada tabela uma vez: vendas agregadas (~5 linhas por dia + ~2 por hora recente), lançamentos agregados (~6 por dia + ~6 por hora recente), parâmetros, manuais, câmbio, coletas (6 linhas), avisos abertos, créditos (OpenAI 7 dias e kie.ai 24 h, sem payload) e alertas. Nada de `payload` nas leituras de tela.
+Desde 13/11 (pedido 4) o cálculo da inicial acontece **só na coleta** (a cada 10 min, no "Atualizar agora" e nas gravações que mudam o lucro: lançamento manual, parâmetro, CSV, venda criada na conferência da Zenith) e fica gravado na tabela `resumos`: uma linha por período pronto (hoje, ontem, 7 dias, marco zero, mês atual, últimas 6 h, últimas 24 h) com totais, comparação, funil, gráfico, saldos das IAs e estado das coletas, mais uma linha minúscula `vivo:hoje`. A inicial, a barra Hoje, o `/api/vivo` e o `/api/resumo` só leem essa linha (≈ 8 KB). O webhook da Zenith não recalcula nada: a próxima coleta faz. Período personalizado, fuso do México ou opções fora do padrão calculam na hora (raro).
+Na coleta, vendas e lançamentos são lidos **agregados no banco** (count/sum por hora nas últimas 48 h e por dia antes disso), uma vez cada, sem a coluna `payload`.
 
 ## Conferir a Zenith (venda que falta)
 - `/api/zenith/eventos?dia=AAAA-MM-DD` (logado como editor): eventos recebidos no dia, o que o painel fez com cada um, vendas gravadas e o botão **criar venda** para um evento que foi mesclado por engano. Sem evento no horário = webhook não chegou → CSV de Conciliação em /importar.
 - CSV "Exportar" em /importar: além de atualizar status, abre o aviso **vendas_faltando** com as referências que o painel não tem.
-
-## Inicial lenta na primeira abertura
-- A coleta (a cada 10 min) e o webhook da Zenith chamam `/api/aquecer` sozinhos; abra `/api/aquecer` logado para ver os tempos. Se os passos mostrarem erro, cole aqui.
 
 ## Se algo der errado
 - Site abre mas dá erro 500: quase sempre `DATABASE_URL` errada (senha ou `[YOUR-PASSWORD]` não trocado). Corrija em Settings → Environment Variables → Redeploy.

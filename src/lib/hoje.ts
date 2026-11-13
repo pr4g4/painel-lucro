@@ -23,6 +23,14 @@ export type DadosHoje = {
 };
 
 export async function dadosHoje(tz = process.env.APP_TZ ?? "America/Sao_Paulo"): Promise<DadosHoje> {
+  // lê o resumo pronto de hoje (1 linha); sem resumo ainda (primeira coleta após o deploy), calcula na hora
+  const { lerResumoPronto } = await import("@/lib/resumos");
+  const r = await lerResumoPronto("hoje").catch(() => null);
+  if (r) {
+    const coletas = new Map<string, EstadoColeta>(Object.entries(r.coletas).map(([f, c]) => [f, { ...c, ultima: new Date(c.ultima), ultimaOk: c.ultimaOk ? new Date(c.ultimaOk) : null }]));
+    const cr = r.creditos;
+    return { hoje: { totais: r.totais } as ResultadoDRE, kie: cr ? { ...cr.kie, lidoEm: cr.kie.lidoEm ? new Date(cr.kie.lidoEm) : null } : null, openai: cr ? { ...cr.openai, lidoEm: cr.openai.lidoEm ? new Date(cr.openai.lidoEm) : null } : null, limites: cr?.limites ?? null, coletas, agora: new Date(), tz: r.tz, problemas: r.problemas };
+  }
   const { lembrar } = await import("@/lib/memoria");
   return lembrar(`hoje:${tz}`, () => dadosHojeBruto(tz), { ttlMs: 30_000, swr: true, rotulo: "barra Hoje" });
 }

@@ -176,3 +176,17 @@ Supabase cortou o projeto antigo por saída de rede (23 GB). Mudança para o pro
 **Painel enxuto:** apagadas as telas Detalhes, DRE, Campanhas, Custos, Por produto, Pedidos, Lançamentos, Lançamentos manuais, Venda manual, Resumo e Gráficos, e os módulos de cálculo que só elas usavam (Profitfy, IA por venda, operação). Lançamentos manuais e créditos da OpenAI foram para /parametros. A coleta da Meta por campanha continua igual (custo e frente). Menu: Início · Avisos · Importar · Parâmetros.
 
 **Funil na inicial:** geradas (criadas no período, qualquer status, sem as duplicadas anuladas), pendentes (criadas no período e ainda pendentes: quantidade · líquido) e conversão (aprovadas ÷ geradas), todos com comparação com o período anterior.
+
+## 13/11 (noite) — pedido 4: resumo pronto na coleta
+
+**Medição do Erick após o 7e3db70:** ~240 MB/dia (limite ~165). As leituras agregadas rodavam ~30 vezes por hora em vez de 6: cada abertura de tela, a barra Hoje, o aquecimento e o /api/vivo (a cada 45 s) refaziam o cálculo desde o marco zero.
+
+**Agora:** `src/lib/resumos.ts` calcula tudo UMA vez no fim de cada coleta (`coletarTudo`) e grava na tabela `resumos` (migração 0006, auto-aplicada): 7 períodos prontos + `vivo:hoje`. As telas só leem a linha (memória 20 s + Data Cache 60 s). Webhook não recalcula; "Atualizar agora" e as gravações que mudam o lucro recalculam uma vez. O aquecimento (`/api/aquecer`) e o pré-carregamento ocioso foram removidos (o pré-carregamento executava a página de parâmetros a cada abertura: 3 leituras escondidas).
+
+**Leituras medidas localmente (consultas ao banco):**
+- 1 coleta: 18 consultas pequenas (vendas agregadas 1, lançamentos agregados 1, parâmetros 4, créditos 2, referências 2, coletas 2, avisos 2, manuais 1, câmbio 1, gravação dos resumos 1) → ~6 coletas/hora ≈ 110 consultas/hora, ≈ 100 KB por coleta.
+- Abrir a inicial (hoje, 7 dias, marco zero): 0 ou 1 consulta (a linha pronta, ≈ 8 KB).
+- `/api/vivo` (aba aberta, a cada 45 s): 1 consulta de ~120 bytes.
+- /avisos: 3 consultas; /parametros: 5 (telas raras).
+
+**O que esperar no pg_stat_statements por hora:** `select status, moeda, historico, fonte, (case when criada_em …` = 6; `select fonte, tipo, moeda, historico, estimado, conta_id …` = 6; `select … from resumos where chave = $1` = 1 por abertura de tela (+ 80/h se a aba ficar aberta, pela linha `vivo:hoje`); `insert into resumos …` = 6. Saída esperada: bem abaixo de 40 MB/dia.

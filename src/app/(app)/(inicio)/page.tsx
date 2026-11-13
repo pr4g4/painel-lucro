@@ -1,10 +1,9 @@
 import { Suspense } from "react";
 import { formatInTimeZone } from "date-fns-tz";
-import { contextoPeriodo } from "@/lib/contexto";
-import { lucroAcumulado, alertaSaldo, resolverAtalho } from "@/lib/calculo";
-import { carregarCreditos } from "@/coletores/creditos";
-import { avisosAbertos } from "@/lib/dados";
+import { alertaSaldo } from "@/lib/calculo";
 import { fontesAtrasadas } from "@/lib/hoje";
+import { resumoDaInicial, propsSeletorDe } from "@/lib/resumos";
+import type { EstadoColeta } from "@/lib/dados";
 import { diaBrasilia } from "@/coletores/base";
 import { fmtMoeda, fmtUSD, fmtHorasRestantes, fmtPctSimples } from "@/lib/formato";
 import { SeletorCompacto } from "@/components/seletor-compacto";
@@ -20,32 +19,30 @@ import type { Params } from "@/lib/periodo-url";
 
 export const dynamic = "force-dynamic";
 
-/** Página inicial: a única tela de números do painel (13/11). */
+/** Página inicial: a única tela de números do painel (13/11). Lê o resumo PRONTO gravado pela coleta; só calcula na hora em período fora do padrão. */
 export default async function Inicio({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = await searchParams;
-  // créditos e avisos não dependem do período: começam junto com o contexto (uma ida ao banco a menos quando a memória está fria)
-  const tzUrl = (Array.isArray(sp.tz) ? sp.tz[0] : sp.tz) === "America/Mexico_City" ? "America/Mexico_City" : "America/Sao_Paulo";
-  const pCreditos = carregarCreditos(new Date(), tzUrl).catch(() => null);
-  const pAvisos = avisosAbertos().catch(() => []);
-  const ctx = await contextoPeriodo(sp);
-  const { estado, atual, anterior, temBaseAnterior, coletas, taxaMxn } = ctx;
-  const [creditos, avisosAb] = await Promise.all([pCreditos, pAvisos]);
-  const t = atual.totais, a = anterior.totais;
-  const fu = ctx.funilAtual, fa = ctx.funilAnterior;
+  const { r, estado } = await resumoDaInicial(sp);
+  const { temBaseAnterior, taxaMxn } = r;
+  const coletas = new Map<string, EstadoColeta>(Object.entries(r.coletas).map(([f, c]) => [f, { ...c, ultima: new Date(c.ultima), ultimaOk: c.ultimaOk ? new Date(c.ultimaOk) : null }]));
+  const creditos = r.creditos ? { ...r.creditos, kie: { ...r.creditos.kie, lidoEm: r.creditos.kie.lidoEm ? new Date(r.creditos.kie.lidoEm) : null }, openai: { ...r.creditos.openai, lidoEm: r.creditos.openai.lidoEm ? new Date(r.creditos.openai.lidoEm) : null } } : null;
+  const propsSel = propsSeletorDe(estado, false);
+  const t = r.totais, a = r.totaisAnterior;
+  const fu = r.funil, fa = r.funilAnterior;
   const money = (v: number | null | undefined) => fmtMoeda(v, estado.moeda, taxaMxn);
   const prefixo = estado.moeda === "MXN" ? "MX$ " : "R$ ";
   const emMoeda = (v: number) => (estado.moeda === "MXN" && taxaMxn ? v / taxaMxn : v);
   const query = new URLSearchParams(Object.entries(sp).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : []))).toString();
 
-  const atrasos = fontesAtrasadas(coletas, estado.agora, avisosAb.some((x) => x.tipo === "webhook_rejeitado"));
+  const atrasos = fontesAtrasadas(coletas, estado.agora, r.avisosTipos.includes("webhook_rejeitado"));
   const periodoTocaHoje = estado.periodo.fim.getTime() > estado.agora.getTime() - 60 * 60_000;
   const incompleto = periodoTocaHoje && atrasos.some((x) => x.fonte === "meta" || x.fonte === "tiktok" || x.fonte === "zenith");
   const varLucro = textoVariacao(t.lucroLiquido, a.lucroLiquido, temBaseAnterior, "moeda", estado.moeda, taxaMxn);
-  const acum = lucroAcumulado(ctx.entrada, estado.periodo, estado.tz);
+  const acum = r.acum;
   // rótulo do fim: "24h" quando o período fecha à meia-noite (Ontem), senão a hora/dia do fim
   const fimH = formatInTimeZone(estado.periodo.fim, estado.tz, "HH:mm");
   const rotuloFim = acum.gran === "hora" ? (fimH === "00:00" ? "24h" : formatInTimeZone(estado.periodo.fim, estado.tz, "HH'h'")) : formatInTimeZone(new Date(estado.periodo.fim.getTime() - 1), estado.tz, "dd/MM");
-  const hoje = estado.atalho === "hoje" ? atual : ctx.calc(resolverAtalho("hoje", estado.agora, estado.marcoZero, estado.tz).periodo); // estado de hoje para o "vivo"
+  const hoje = r.hoje; // estado de hoje para o "vivo"
   const ultimaOk = ["meta", "cambio", "openai", "kie"].map((f) => coletas.get(f)?.ultimaOk?.getTime() ?? 0).reduce((m, x) => Math.max(m, x), 0);
   const cambio = coletas.get("cambio");
   const agendadorOk = !!cambio && estado.agora.getTime() - cambio.ultima.getTime() <= 15 * 60_000;
@@ -66,15 +63,15 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
   return (
     <div className="inicial">
       <Suspense fallback={<div className="chips-linha"><div className="skeleton" style={{ width: 240, height: 36, borderRadius: 999 }} /></div>}>
-        <SeletorCompacto atalho={estado.atalho} deLocal={ctx.propsSeletor.deLocal} ateLocal={ctx.propsSeletor.ateLocal} tz={estado.tz} moeda={estado.moeda} incluirHistorico={estado.incluirHistorico} incluirManuais={estado.incluirManuais} />
+        <SeletorCompacto atalho={estado.atalho} deLocal={propsSel.deLocal} ateLocal={propsSel.ateLocal} tz={estado.tz} moeda={estado.moeda} incluirHistorico={estado.incluirHistorico} incluirManuais={estado.incluirManuais} />
       </Suspense>
-      {ctx.problemas.length > 0 && <div className="text-xs text-warn">{ctx.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
+      {r.problemas.length > 0 && <div className="text-xs text-warn">{r.problemas.map((p, i) => <div key={i}>⚠ {p}</div>)}</div>}
       {periodoTocaHoje && <FaixaAtraso atrasos={atrasos} tz={estado.tz} />}
 
       <div className="entra" key={query}>
         <section className="hero-ini" aria-label="Lucro líquido do período">
           <Entretem />
-          <div className="hero-k">Lucro líquido <span className="text-ink-3">· {ctx.propsSeletor.rotuloPeriodo}</span>{incompleto && <span className="bh-incompleto" title="uma fonte está sem atualizar; o valor vai mudar quando ela voltar">incompleto</span>}</div>
+          <div className="hero-k">Lucro líquido <span className="text-ink-3">· {propsSel.rotuloPeriodo}</span>{incompleto && <span className="bh-incompleto" title="uma fonte está sem atualizar; o valor vai mudar quando ela voltar">incompleto</span>}</div>
           <div className={`hero-v ${t.lucroLiquido < 0 ? "neg" : t.lucroLiquido > 0 ? "pos" : ""}`}>
             <NumeroAnimado chave="lucro" valor={emMoeda(t.lucroLiquido)} texto={money(t.lucroLiquido)} prefixo={prefixo} />
           </div>
@@ -136,8 +133,8 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
 
       </div>
 
-      <GuardarUltimoBom quando={formatInTimeZone(estado.agora, estado.tz, "dd/MM HH:mm")} periodo={ctx.propsSeletor.rotuloPeriodo} lucro={t.lucroLiquido} lucroTexto={money(t.lucroLiquido)} itens={[{ k: "receita", v: money(t.receitaLiquida) }, { k: "anúncios", v: money(t.anunciosComImposto) }, { k: "IA", v: money(t.ia) }, { k: "vendas", v: String(t.numVendas) }]} />
-      <Vivo inicial={{ vendas: hoje.totais.numVendas, lucro: hoje.totais.lucroLiquido, ultimaMxn: null, dia: diaBrasilia(estado.agora) }} />
+      <GuardarUltimoBom quando={formatInTimeZone(estado.agora, estado.tz, "dd/MM HH:mm")} periodo={propsSel.rotuloPeriodo} lucro={t.lucroLiquido} lucroTexto={money(t.lucroLiquido)} itens={[{ k: "receita", v: money(t.receitaLiquida) }, { k: "anúncios", v: money(t.anunciosComImposto) }, { k: "IA", v: money(t.ia) }, { k: "vendas", v: String(t.numVendas) }]} />
+      <Vivo inicial={{ vendas: hoje.numVendas, lucro: hoje.lucroLiquido, ultimaMxn: null, dia: diaBrasilia(estado.agora) }} />
     </div>
   );
 }

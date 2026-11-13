@@ -216,3 +216,10 @@ export const visoesSalvas = pgTable("visoes_salvas", {
   usuarioId: integer("usuario_id").references(() => usuarios.id),
   criadoEm: timestamp("criado_em", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/** Resumos prontos da inicial (13/11, pedido 4): 1 linha por período, calculada na coleta; as telas só leem a linha. */
+export const resumos = pgTable("resumos", {
+  chave: text("chave").primaryKey(), // "inicial:hoje", "inicial:marco_zero", "vivo:hoje"…
+  calculadoEm: timestamp("calculado_em", { withTimezone: true }).notNull().defaultNow(),
+  dados: jsonb("dados").notNull(),
+});

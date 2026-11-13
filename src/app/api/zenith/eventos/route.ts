@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
   let acao = "";
   const criar = req.nextUrl.searchParams.get("criar");
-  if (criar) { const r = await criarVendaDoEvento(criar); acao = `${r.ok ? "✔" : "✖"} ${r.resultado}`; invalidarDados(); }
+  if (criar) { const r = await criarVendaDoEvento(criar); acao = `${r.ok ? "✔" : "✖"} ${r.resultado}`; invalidarDados(); await (await import("@/lib/resumos")).recalcularResumos().catch(() => null); }
 
   const [eventos, vendas] = await Promise.all([
     executar((d) => d.select().from(schema.zenithEventos).where(and(gte(schema.zenithEventos.recebidoEm, ini), lt(schema.zenithEventos.recebidoEm, fim))).orderBy(asc(schema.zenithEventos.recebidoEm)), 15000, "eventos do dia"),

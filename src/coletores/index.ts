@@ -67,5 +67,8 @@ export async function coletarTudo(): Promise<ResultadoColeta[]> {
   for (const f of FONTES) { const t0 = Date.now(); const r = await coletar(f); out.push({ ...r, detalhe: { ...(r.detalhe ?? {}), duracaoMs: Date.now() - t0 } }); }
   try { const { verificarSaldos } = await import("./creditos"); await verificarSaldos(); } catch { /* alerta de saldo não derruba a coleta */ }
   try { const { processarAlertas } = await import("@/alertas/motor"); const r = await processarAlertas(); out.push({ fonte: "alertas", ok: r.erros.length === 0, registros: r.enviados.length, erro: r.erros.join(" | ") || undefined, detalhe: { provedor: r.provedor, configurado: r.configurado, faltando: r.faltando } }); } catch { /* nunca derruba a coleta */ }
+  // resumos prontos da inicial (pedido 4): o cálculo acontece aqui, uma vez por coleta; as telas só leem a linha
+  try { const { invalidarDados } = await import("@/lib/cache"); invalidarDados(); const { recalcularResumos } = await import("@/lib/resumos"); const r = await recalcularResumos(); out.push({ fonte: "resumos", ok: true, registros: r.gravados, detalhe: { duracaoMs: r.ms } }); }
+  catch (e) { out.push({ fonte: "resumos", ok: false, registros: 0, erro: e instanceof Error ? e.message : String(e) }); }
   return out;
 }

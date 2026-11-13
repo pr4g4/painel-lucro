@@ -1,9 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getIronSession } from "iron-session";
 import { SESSAO_OPCOES, type Sessao } from "@/lib/auth/sessao";
-import { contextoPeriodo } from "@/lib/contexto";
-import { calcularPeriodoComAnterior } from "@/lib/dados";
-import { resolverAtalho } from "@/lib/calculo";
+import { resumoDaInicial, lerResumoPronto, propsSeletorDe } from "@/lib/resumos";
 import { fmtBRL } from "@/lib/formato";
 import { coletarTudo } from "@/coletores";
 
@@ -22,9 +20,8 @@ export async function GET(req: NextRequest) {
   if (!segredoOk && !s.usuarioId) return new NextResponse("não autorizado", { status: 401 });
   if (req.nextUrl.searchParams.get("coletar") === "1") await coletarTudo();
   const sp = Object.fromEntries(req.nextUrl.searchParams.entries());
-  const ctx = await contextoPeriodo(sp);
-  const hojeP = resolverAtalho("hoje", ctx.estado.agora, ctx.estado.marcoZero, ctx.estado.tz).periodo;
-  const hoje = await calcularPeriodoComAnterior(hojeP, { tz: ctx.estado.tz, incluirHistorico: false, incluirManuais: ctx.estado.incluirManuais });
-  const linha = `Lucro líquido hoje: ${fmtBRL(hoje.atual.totais.lucroLiquido)} · ${ctx.propsSeletor.rotuloPeriodo}: ${fmtBRL(ctx.atual.totais.lucroLiquido)} (${ctx.atual.totais.numVendas} vendas, metade p/ cada ${fmtBRL(ctx.atual.totais.porSocio)})`;
+  const { r, estado } = await resumoDaInicial(sp);
+  const hoje = (await lerResumoPronto("hoje").catch(() => null))?.totais ?? r.hoje;
+  const linha = `Lucro líquido hoje: ${fmtBRL(hoje.lucroLiquido)} · ${propsSeletorDe(estado, false).rotuloPeriodo}: ${fmtBRL(r.totais.lucroLiquido)} (${r.totais.numVendas} vendas, meta c/ imposto ${fmtBRL(r.totais.metaComImposto)}, IA ${fmtBRL(r.totais.ia)})`;
   return new NextResponse(linha, { headers: { "content-type": "text/plain; charset=utf-8" } });
 }

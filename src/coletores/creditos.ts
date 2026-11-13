@@ -12,7 +12,7 @@ function paraCalc(l: { id: number; fonte: string; tipo: string; instante: Date; 
   return { id: l.id, fonte: l.fonte, tipo: l.tipo, instante: l.instante, granularidade: l.granularidade, descricao: l.descricao, valorBrl: Number(l.valorBrl), valorOriginal: Number(l.valorOriginal), moeda: l.moeda, contaId: l.contaId, campanhaId: l.campanhaId, modelo: l.modelo, frente: null, historico: l.historico, estimado: l.estimado };
 }
 
-type Creditos = { kie: SaldoIA; openai: SaldoIA; limites: { horas: number; usd: number } };
+export type Creditos = { kie: SaldoIA; openai: SaldoIA; limites: { horas: number; usd: number } };
 /** Cache de 60 s compartilhado entre instâncias (Data Cache da Vercel, tag "dados") + memória: a inicial em instância fria não vai ao banco. */
 const creditosCache = unstable_cache(async (tz: string) => {
   const { lembrar } = await import("@/lib/memoria");
