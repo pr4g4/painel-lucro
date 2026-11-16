@@ -90,6 +90,29 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
           {bloco("vendas", "Nº de vendas", t.numVendas, a.numVendas, false, true)}
         </section>
 
+        {/* custo por venda × empate (pedido 5, 15/11): anúncios ÷ vendas contra (receita líquida − IA − fixos) ÷ vendas */}
+        {(() => {
+          const cpv = (x: typeof t) => (x.numVendas > 0 ? x.anunciosComImposto / x.numVendas : null);
+          const empate = (x: typeof t) => (x.numVendas > 0 ? (x.receitaLiquida - x.ia - x.zapdata - x.operacao) / x.numVendas : null);
+          const c = cpv(t), e = empate(t), cAnt = cpv(a);
+          const v = textoVariacao(c ?? 0, cAnt, temBaseAnterior && c != null && cAnt != null, "moeda", estado.moeda, taxaMxn);
+          const bom = v.bom == null ? null : !v.bom; // custo menor é melhor
+          const corpo = v.texto.replace(/^[+-]/, "").replace(" vs. anterior", "");
+          const abaixo = c != null && e != null ? c <= e : null;
+          return (
+            <section className="blocos blocos-1" aria-label="Custo por venda">
+              <div className="bloco bloco-largo">
+                <div className="bloco-k">Custo por venda <span className="text-ink-3">· anúncios ÷ vendas</span></div>
+                <div className="bloco-linha">
+                  <div className={`bloco-v num ${abaixo == null ? "" : abaixo ? "pos" : "neg"}`} title={c == null ? "sem vendas no período" : abaixo ? "abaixo do empate: cada venda paga o anúncio e sobra" : "acima do empate: o anúncio custa mais do que a venda deixa"}>{c == null ? "—" : money(c)}</div>
+                  <div className="bloco-empate num"><span className="text-ink-3">empate</span> <b title="(receita líquida − IA − fixos do período) ÷ vendas">{e == null ? "—" : money(e)}</b></div>
+                </div>
+                <div className={`bloco-s num ${bom == null ? "" : bom ? "pos" : "neg"}`} title={v.texto}>{!v.texto ? "" : v.bom == null ? `= ${corpo}` : `${v.texto.startsWith("+") ? "▲" : "▼"} ${corpo}`}</div>
+              </div>
+            </section>
+          );
+        })()}
+
         {/* funil do período (13/11): geradas, pendentes e conversão, na definição da "Taxa de aprovação" da Zenith */}
         <section className="blocos blocos-3" aria-label="Funil de vendas do período">
           {bloco("geradas", "Geradas", fu.geradas, fa.geradas, false, true)}
@@ -121,15 +144,11 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
 
         <AreaAcumulado pontos={acum.pontos.map((p) => ({ rotulo: p.rotulo, acumulado: emMoeda(p.acumulado), valor: emMoeda(p.valor) }))} rotuloFim={rotuloFim} gran={acum.gran} moeda={estado.moeda} />
 
-        {creditos && (
-          <div className="saldos-linha num">
-            {[creditos.kie, creditos.openai].map((s) => {
-              const baixo = !!alertaSaldo(s, creditos.limites);
-              const nome = s.fonte === "kie" ? "kie.ai" : "OpenAI";
-              return <a key={s.fonte} href="/parametros#creditos" className={`saldo-item ${baixo ? "saldo-baixo" : ""}`} title={s.indisponivel ?? (s.estimado ? "estimado" : "")}>{baixo ? "⚠ " : ""}{nome} {s.indisponivel ? "—" : fmtUSD(s.saldoUsd)}{s.horasRestantes != null ? <span className="text-ink-3"> · {fmtHorasRestantes(s.horasRestantes)}</span> : null}</a>;
-            })}
-          </div>
-        )}
+        {/* selos (pedido 5): kie.ai só se teve consumo nos últimos 7 dias; OpenAI mostra o gasto do período em R$ */}
+        <div className="saldos-linha num">
+          {creditos && r.kieUso7dUsd > 0 && (() => { const s = creditos.kie; const baixo = !!alertaSaldo(s, creditos.limites); return <a href="/parametros#creditos" className={`saldo-item ${baixo ? "saldo-baixo" : ""}`} title={s.indisponivel ?? ""}>{baixo ? "⚠ " : ""}kie.ai {s.indisponivel ? "—" : fmtUSD(s.saldoUsd)}{s.horasRestantes != null ? <span className="text-ink-3"> · {fmtHorasRestantes(s.horasRestantes)}</span> : null}</a>; })()}
+          <a href="/parametros#creditos" className="saldo-item" title={creditos?.openai.saldoUsd != null ? `saldo estimado ${fmtUSD(creditos.openai.saldoUsd)}` : "gasto da OpenAI no período"}>OpenAI {money(t.iaOpenai)}<span className="text-ink-3"> no período</span></a>
+        </div>
 
       </div>
 

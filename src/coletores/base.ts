@@ -75,8 +75,12 @@ export async function upsertVendas(rows: NovaVenda[]): Promise<number> {
 
 /** Taxa de câmbio do dia (ou a última anterior); null se não houver nenhuma. */
 export async function taxaDoDia(par: "USDBRL" | "MXNBRL", dia: string): Promise<{ taxa: number; provisoria: boolean } | null> {
-  const [r] = await db.select().from(schema.cambio).where(and(eq(schema.cambio.par, par), sql`${schema.cambio.dia} <= ${dia}`)).orderBy(desc(schema.cambio.dia)).limit(1);
-  return r ? { taxa: Number(r.taxa), provisoria: r.provisoria || r.dia !== dia } : null;
+  // memória de 10 min por (par, dia): a coleta pedia a mesma taxa uma vez por lançamento (15 mil selects em 2 dias); a coleta de câmbio esquece ao gravar
+  const { lembrar } = await import("@/lib/memoria");
+  return lembrar(`cambio:${par}:${dia}`, async () => {
+    const [r] = await db.select().from(schema.cambio).where(and(eq(schema.cambio.par, par), sql`${schema.cambio.dia} <= ${dia}`)).orderBy(desc(schema.cambio.dia)).limit(1);
+    return r ? { taxa: Number(r.taxa), provisoria: r.provisoria || r.dia !== dia } : null;
+  }, { ttlMs: 10 * 60_000, rotulo: "câmbio do dia" });
 }
 
 export function diaBrasilia(d: Date): string {

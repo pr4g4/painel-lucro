@@ -16,7 +16,7 @@ if (!url) throw new Error("DATABASE_URL não definida");
  *   deixamos o antigo fechar sozinho e repetimos a consulta uma vez num cliente novo.
  */
 function criarSql() {
-  return postgres(url!, { max: 6, prepare: false, idle_timeout: 20, connect_timeout: 8, onnotice: () => {} }); // 6: uma página abre várias consultas em paralelo; com 3 elas entravam em fila
+  return postgres(url!, { max: 6, prepare: false, idle_timeout: 20, connect_timeout: 8, fetch_types: false, onnotice: () => {} }); // 6: uma página abre várias consultas em paralelo; com 3 elas entravam em fila
 }
 
 type Db = PostgresJsDatabase<typeof schema>;

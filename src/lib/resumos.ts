@@ -35,6 +35,7 @@ export type ResumoInicial = {
   coletas: Record<string, ColetaS>;
   avisosTipos: string[];
   creditos: CreditosS | null;
+  kieUso7dUsd: number; // uso da kie.ai nos últimos 7 dias: zero = selo escondido na inicial
   problemas: string[];
 };
 export type Extras = { coletas: Map<string, EstadoColeta>; avisosTipos: string[]; creditos: Creditos | null };
@@ -59,6 +60,7 @@ export function montarResumo(entrada: Entrada, estado: EstadoPeriodo, extras: Ex
     acum: { gran: acum.gran, pontos: acum.pontos.map((p) => ({ rotulo: p.rotulo, valor: p.valor, acumulado: p.acumulado })) },
     hoje: hoje.totais, taxaMxn: entrada.opcoes.cambio("MXNBRL", estado.agora),
     coletas, avisosTipos: extras.avisosTipos,
+    kieUso7dUsd: entrada.lancamentos.filter((l) => l.fonte === "kie" && l.tipo === "uso_ia" && l.instante.getTime() >= estado.agora.getTime() - 7 * 86_400_000).reduce((s, l) => s + l.valorOriginal, 0),
     creditos: cr ? { ...cr, kie: { ...cr.kie, lidoEm: cr.kie.lidoEm?.toISOString() ?? null }, openai: { ...cr.openai, lidoEm: cr.openai.lidoEm?.toISOString() ?? null } } : null,
     problemas,
   };

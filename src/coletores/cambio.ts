@@ -53,6 +53,7 @@ export const clienteReal: CambioCliente = {
 async function gravar(dia: string, par: string, taxa: number, fonte: string, provisoria = false) {
   await db.insert(schema.cambio).values({ dia, par, taxa: String(taxa), fonte, provisoria })
     .onConflictDoUpdate({ target: [schema.cambio.dia, schema.cambio.par], set: { taxa: String(taxa), provisoria, fonte, coletadoEm: new Date() } });
+  (await import("@/lib/memoria")).esquecerMemoria("cambio:"); // taxaDoDia memorizada: a nova taxa vale já
 }
 
 /** Última PTAX USD até o dia (na tabela). */

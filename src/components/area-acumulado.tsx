@@ -9,6 +9,7 @@ export type PontoS = { rotulo: string; acumulado: number; valor: number };
  */
 export function AreaAcumulado({ pontos, rotuloFim, gran, moeda = "BRL" }: { pontos: PontoS[]; rotuloFim: string; gran: "hora" | "dia"; moeda?: "BRL" | "MXN" }) {
   const [sel, setSel] = useState<number | null>(null);
+  const [fixo, setFixo] = useState(false); // no toque, a seleção fica até o próximo toque (no iPhone não há "passar o mouse")
   const W = 600, H = 130, padX = 6, padY = 10;
   if (pontos.length < 2) return <div className="area-lucro text-xs text-ink-3">sem pontos suficientes para o gráfico</div>;
   const vals = [0, ...pontos.map((p) => p.acumulado)];
@@ -21,18 +22,26 @@ export function AreaAcumulado({ pontos, rotuloFim, gran, moeda = "BRL" }: { pont
   const zero = y(0);
   const area = `${linha} L${pts[pts.length - 1][0].toFixed(1)},${zero.toFixed(1)} L${padX},${zero.toFixed(1)} Z`;
   const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: moeda, maximumFractionDigits: 2 }).format(v);
-  const escolher = (e: React.PointerEvent<SVGSVGElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const px = ((e.clientX - r.left) / r.width) * W;
+  const escolherEm = (clientX: number, alvo: Element) => {
+    const r = alvo.getBoundingClientRect();
+    const px = ((clientX - r.left) / r.width) * W;
     let melhor = 0; for (let i = 1; i < pts.length; i++) if (Math.abs(pts[i][0] - px) < Math.abs(pts[melhor][0] - px)) melhor = i;
     setSel(melhor);
   };
+  const escolher = (e: React.PointerEvent<SVGSVGElement>) => { if (e.pointerType === "touch") setFixo(true); escolherEm(e.clientX, e.currentTarget); };
+  const sair = (e: React.PointerEvent<SVGSVGElement>) => { if (e.pointerType !== "touch" && !fixo) setSel(null); };
   const p = sel != null ? pts[sel] : null;
   const ponto = sel != null && sel > 0 ? pontos[sel - 1] : null;
   const meio = pontos[Math.floor((n - 1) / 2)];
   return (
-    <figure className="area-lucro">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Lucro líquido acumulado" onPointerMove={escolher} onPointerDown={escolher} onPointerLeave={() => setSel(null)}>
+    <figure className="area-lucro" style={{ position: "relative" }}>
+      <span className="area-zero num" style={{ top: `${(zero / H) * 100}%` }}>{fmt(0)}</span>
+      {ponto && p && (
+        <span className={`area-dica num ${ponto.acumulado >= 0 ? "pos" : "neg"}`} style={{ left: `${(p[0] / W) * 100}%`, top: `${(p[1] / H) * 100}%`, transform: `translate(${p[0] > W * 0.7 ? "-100%" : "8px"}, ${p[1] < H * 0.35 ? "8px" : "-110%"})` }}>
+          <b>{fmt(ponto.acumulado)}</b> · {gran === "hora" ? `até ${ponto.rotulo.replace("h", "")}:59` : ponto.rotulo}
+        </span>
+      )}
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="Lucro líquido acumulado" onPointerMove={(e) => { if (e.pointerType !== "touch") escolher(e); }} onPointerDown={escolher} onPointerLeave={sair}>
         <defs>
           <clipPath id="acima"><rect x="0" y="0" width={W} height={zero} /></clipPath>
           <clipPath id="abaixo"><rect x="0" y={zero} width={W} height={H - zero} /></clipPath>

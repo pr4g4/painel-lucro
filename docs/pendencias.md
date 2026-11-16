@@ -190,3 +190,9 @@ Supabase cortou o projeto antigo por saída de rede (23 GB). Mudança para o pro
 - /avisos: 3 consultas; /parametros: 5 (telas raras).
 
 **O que esperar no pg_stat_statements por hora:** `select status, moeda, historico, fonte, (case when criada_em …` = 6; `select fonte, tipo, moeda, historico, estimado, conta_id …` = 6; `select … from resumos where chave = $1` = 1 por abertura de tela (+ 80/h se a aba ficar aberta, pela linha `vivo:hoje`); `insert into resumos …` = 6. Saída esperada: bem abaixo de 40 MB/dia.
+
+## 16/11 — pedido 5 (inicial)
+- **Custo por venda** = anúncios com imposto ÷ vendas aprovadas; **empate** = (receita líquida − IA − ZapData − operação) ÷ vendas. Verde abaixo do empate, vermelho acima; comparação com o período anterior (custo menor = melhor). Sem vendas: "—". Tudo vem da linha pronta (totais), sem leitura extra.
+- Selos: kie.ai só aparece se teve consumo nos últimos 7 dias (`kieUso7dUsd` na linha pronta; segue em /avisos); o selo da OpenAI mostra o gasto do período em R$ (saldo estimado no título ao tocar).
+- Gráfico acumulado: tocar (fica fixo até o próximo toque) ou passar o mouse mostra valor e hora num balão; linha do zero com "R$ 0,00".
+- Técnico: `fetch_types: false` no postgres.js (acaba com o `select b.oid, b.typarray …` a cada conexão); `taxaDoDia` fica 10 min em memória por (par, dia) e a coleta de câmbio esquece ao gravar (acaba com um select de câmbio por lançamento).

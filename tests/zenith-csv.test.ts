@@ -39,6 +39,7 @@ describe.skipIf(!process.env.DATABASE_URL)("importação do CSV + dedup com webh
   });
   it("fim de semana usa a última PTAX até a data (sexta 02/10); líquido listado + reserva = líquido antes da reserva", async () => {
     await db.execute(sql`insert into cambio (dia, par, taxa, fonte) values ('2026-10-02','MXNBRL','0.30','ptax'), ('2026-10-01','MXNBRL','0.29','ptax')`);
+    (await import("../src/lib/memoria")).esquecerMemoria("cambio:"); // taxaDoDia fica em memória 10 min; aqui a taxa foi gravada direto
     const r = await importar(lerCsvConciliacaoZenith(CSV));
     expect(r.ok).toBe(true); expect(r.registros).toBe(3);
     const vs = await db.select().from(schema.vendas);
