@@ -53,9 +53,9 @@ describe("interpretação dos eventos", () => {
     expect(r.venda.aprovadaEm).toEqual(new Date("2026-10-04T15:00:00Z"));
   });
   it("sem referenceId usa data.id; sem nada usa o id do evento; pending/refund/chargeback mapeiam status", () => {
-    const a = interpretarEvento({ type: "deposit.credited", data: { id: "dep1", amount: 9900 } }, null, "1790000000", "evt2");
+    const a = interpretarEvento({ type: "deposit.credited", data: { id: "dep1", amount: 9900, currency: "MXN" } }, null, "1790000000", "evt2");
     expect(a.ok && a.identidade).toBe("dep1");
-    const b = interpretarEvento({ type: "payment.pending", data: { amount: 9900 } }, null, "1790000000", "evt3");
+    const b = interpretarEvento({ type: "payment.pending", data: { amount: 9900, currency: "MXN" } }, null, "1790000000", "evt3");
     expect(b.ok && b.venda.status).toBe("pendente"); expect(b.ok && b.venda.aprovadaEm).toBeNull(); expect(b.ok && b.identidade).toBe("evt3");
     const c = interpretarEvento({ type: "payment.refunded", data: { referenceId: "ref9", refundedAt: "2026-10-05T10:00:00Z" } }, null, null, "evt4");
     expect(c.ok && c.venda.status).toBe("reembolsada"); expect(c.ok && c.venda.reembolsadaEm).toEqual(new Date("2026-10-05T10:00:00Z"));

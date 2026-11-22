@@ -38,10 +38,10 @@ export async function GET(req: NextRequest) {
   ]);
   const h = (d: Date | null) => (d ? formatInTimeZone(d, TZ, "HH:mm:ss") : "—");
   const dados = (e: typeof eventos[number]) => { const pl = (e.payload ?? {}) as { data?: Record<string, unknown>; corpoBruto?: string }; if (pl.data) return pl.data; try { return (JSON.parse(pl.corpoBruto ?? "") as { data?: Record<string, unknown> }).data ?? {}; } catch { return {}; } };
-  const valor = (d: Record<string, unknown>) => { const a = Number(d.amount ?? d.amountCents ?? d.value); return Number.isFinite(a) ? `${String(d.currency ?? "MXN").toUpperCase()} ${(a / 100).toFixed(2)}` : "—"; };
+  const valor = (d: Record<string, unknown>) => { const a = Number(d.amount ?? d.amountCents ?? d.value); return Number.isFinite(a) ? `${String(d.currency ?? "?").toUpperCase()} ${(a / 100).toFixed(2)}` : "—"; };
   const nome = (d: Record<string, unknown>) => { for (const o of [d, d.payer, d.customer, d.client, d.sender]) { if (o && typeof o === "object") { const x = o as Record<string, unknown>; const n = x.payerName ?? x.customerName ?? x.senderName ?? x.name ?? x.nombre ?? x.email; if (typeof n === "string" && n) return n; } } return ""; };
   const aprovadas = vendas.filter((v) => v.status === "aprovada");
-  const somaMxn = aprovadas.filter((v) => v.moeda === "MXN").reduce((t, v) => t + Number(v.brutoOriginal), 0);
+  const somaPorMoeda = [...aprovadas.reduce((m, v) => m.set(v.moeda, (m.get(v.moeda) ?? 0) + Number(v.brutoOriginal)), new Map<string, number>())].map(([c, t]) => `${c} ${t.toFixed(2)}`).join(" · ") || "—";
   const rejeitados = eventos.filter((e) => !e.assinaturaOk).length, comErro = eventos.filter((e) => e.assinaturaOk && /^erro/.test(e.resultado ?? "")).length;
   const mescladosPorHeuristica = eventos.filter((e) => /família diferente/.test(e.resultado ?? ""));
   const linhasEv = eventos.map((e) => {
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
 <h1 style="font-size:18px">Zenith · conferência de ${dia} (horário de Brasília)</h1>
 <form><label>Dia <input type="date" name="dia" value="${dia}"></label> <button>Ver</button></form>
 ${acao ? `<div class="box"><b>Ação:</b> ${esc(acao)}</div>` : ""}
-<div class="box"><b>Vendas aprovadas no painel:</b> ${aprovadas.length} (MX$ ${somaMxn.toFixed(2)}) · pendentes ${vendas.filter((v) => v.status === "pendente").length} · outras ${vendas.length - aprovadas.length - vendas.filter((v) => v.status === "pendente").length}<br>
+<div class="box"><b>Vendas aprovadas no painel:</b> ${aprovadas.length} (${somaPorMoeda}) · pendentes ${vendas.filter((v) => v.status === "pendente").length} · outras ${vendas.length - aprovadas.length - vendas.filter((v) => v.status === "pendente").length}<br>
 <b>Eventos recebidos pelo webhook:</b> ${eventos.length} · rejeitados na assinatura ${rejeitados} · com erro ${comErro} · <span style="color:#7c3aed">mesclados por valor/hora (não somaram): ${mescladosPorHeuristica.length}</span><br>
 <span style="font-size:12px">Compare o número de aprovadas e a soma com a tela de vendas da Zenith. Se a Zenith tem uma venda que não está abaixo: (a) se ela aparece na lista de eventos em roxo ("já registrada … família diferente"), clique <b>criar venda</b> nessa linha; (b) se não há evento nenhum no horário dela, o webhook não chegou: importe o CSV de Conciliação do dia em /importar.</span></div>
 <h2 style="font-size:15px">Eventos do webhook (${eventos.length})</h2>

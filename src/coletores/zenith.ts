@@ -7,6 +7,7 @@ import { executarColeta, upsertVendas, marcoZeroAtual, taxaDoDia, diaBrasilia, t
 import { db, schema } from "@/db";
 import { and, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import { numeroVigente } from "@/lib/calculo";
+import { normalizarMoeda } from "@/lib/moedas";
 import { pagadoresCompativeis } from "./zenith-webhook";
 
 export type VendaZenithBruta = {
@@ -15,8 +16,9 @@ export type VendaZenithBruta = {
   criadaEm?: string | Date | null;
   aprovadaEm?: string | Date | null;
   reembolsadaEm?: string | Date | null;
-  moeda: "MXN" | "BRL";
+  moeda: string; // código ISO de 3 letras (MXN, ARS, COP, BRL…)
   bruto: number;
+  deducoesTotais?: number | null; // deduções totais informadas pelo evento, na moeda da venda
   brlEstimado?: number | null; // bruto convertido em BRL, como a Zenith mostra
   liquido?: number | null; // líquido listado pela Zenith (depois de taxas, ANTES de somar a reserva de volta)
   reserva?: number | null; // reserva retida
@@ -34,13 +36,16 @@ export async function normalizarVenda(v: VendaZenithBruta, fonte = "zenith"): Pr
   const marco = await marcoZeroAtual();
   const params = (await db.select().from(schema.parametros)).map((p) => ({ chave: p.chave, valor: p.valor, vigenciaInicio: p.vigenciaInicio, vigenciaFim: p.vigenciaFim }));
   const ref = d(v.aprovadaEm) ?? d(v.criadaEm) ?? new Date();
-  const taxaCambio = v.moeda === "BRL" ? 1 : v.brlEstimado != null && v.bruto ? v.brlEstimado / v.bruto : await taxaMxnAte(ref);
-  if (taxaCambio == null) throw new Error(`Venda ${v.id}: sem câmbio MXN→BRL (nem BRL estimado nem nenhuma taxa PTAX gravada; rode a coleta de câmbio)`);
+  const taxaCambio = v.moeda === "BRL" ? 1 : v.brlEstimado != null && v.bruto ? v.brlEstimado / v.bruto : await taxaMoedaAte(v.moeda, ref);
+  if (taxaCambio == null) throw new Error(`Venda ${v.id}: sem câmbio ${v.moeda}→BRL (nenhuma taxa gravada para essa moeda; a venda fica fora da receita até a taxa chegar)`);
   const brutoBrl = v.bruto * taxaCambio;
   // deduções informadas pela fonte vêm na moeda da venda → converte; senão calcula pelos parâmetros vigentes
-  const taxaPct = v.taxaPct != null ? v.taxaPct * taxaCambio : brutoBrl * numeroVigente(params, "taxa_zenith_pct", ref) / 100;
-  const taxaFixa = v.taxaFixa != null ? v.taxaFixa * taxaCambio : (v.moeda === "BRL" ? numeroVigente(params, "taxa_zenith_fixa_brl", ref) : numeroVigente(params, "taxa_zenith_fixa_mxn", ref) * taxaCambio);
-  const cambioPct = v.cambioPct != null ? v.cambioPct * taxaCambio : brutoBrl * numeroVigente(params, "cambio_zenith_pct", ref) / 100;
+  // deduções do EVENTO (total informado pela Zenith) valem mais que os parâmetros, desde que plausíveis (1% a 40% do bruto)
+  const dedEvento = v.deducoesTotais != null && v.bruto > 0 && v.deducoesTotais >= v.bruto * 0.01 && v.deducoesTotais <= v.bruto * 0.4 ? v.deducoesTotais : null;
+  const fixaPar = v.moeda === "BRL" ? numeroVigente(params, "taxa_zenith_fixa_brl", ref) : v.moeda === "MXN" ? numeroVigente(params, "taxa_zenith_fixa_mxn", ref) * taxaCambio : numeroVigente(params, `taxa_zenith_fixa_${v.moeda.toLowerCase()}`, ref, 0) * taxaCambio;
+  const taxaPct = dedEvento != null ? dedEvento * taxaCambio : v.taxaPct != null ? v.taxaPct * taxaCambio : brutoBrl * numeroVigente(params, "taxa_zenith_pct", ref) / 100;
+  const taxaFixa = dedEvento != null ? 0 : v.taxaFixa != null ? v.taxaFixa * taxaCambio : fixaPar;
+  const cambioPct = dedEvento != null ? 0 : v.cambioPct != null ? v.cambioPct * taxaCambio : brutoBrl * numeroVigente(params, "cambio_zenith_pct", ref) / 100;
   // líquido antes da reserva: bruto − deduções. Se a fonte listou "líquido" já descontada a reserva, a reserva é somada de volta (reserva não é custo).
   const liquidoCalc = brutoBrl - taxaPct - taxaFixa - cambioPct;
   // Reserva retida (não é custo). Se a fonte não informa, usa o parâmetro vigente (% do bruto):
@@ -54,11 +59,23 @@ export async function normalizarVenda(v: VendaZenithBruta, fonte = "zenith"): Pr
     taxaPctBrl: String(taxaPct), taxaFixaBrl: String(taxaFixa), cambioPctBrl: String(cambioPct), liquidoBrl: String(liquidoBrl),
     reservaBrl: String(reserva), reservaLiberadaEm: d(v.reservaLiberadaEm), historico: (aprovadaEm ?? ref) < marco,
     payload: { ...(typeof v.payload === "object" && v.payload ? v.payload as Record<string, unknown> : { bruto: v })
-      , ids: [...new Set([v.id, ...(v.ids ?? [])].filter(Boolean))] },
+      , ids: [...new Set([v.id, ...(v.ids ?? [])].filter(Boolean))], deducoes: dedEvento != null ? "evento" : "parametros", ...(v.moeda !== "MXN" && v.moeda !== "BRL" && v.brlEstimado == null ? { cambioEstimado: true } : {}) },
   };
 }
 
 /** Taxa MXN→BRL vigente na data (última PTAX até a data, inclusive fim de semana/feriado); antes da primeira conhecida, usa a mais antiga. */
+/** Taxa MOEDA→BRL vigente na data (última até o dia). Sem taxa → null: nunca se usa a de outra moeda. Moeda diferente de MXN/BRL tenta buscar a taxa na hora. */
+export async function taxaMoedaAte(moeda: string, quando: Date): Promise<number | null> {
+  if (moeda === "BRL") return 1;
+  if (moeda === "MXN") return taxaMxnAte(quando);
+  const dia = diaBrasilia(quando);
+  const par = `${moeda}BRL`;
+  const t = await taxaDoDia(par, dia);
+  if (t) return t.taxa;
+  const { garantirTaxaMoeda } = await import("./cambio");
+  await garantirTaxaMoeda(moeda, dia);
+  return (await taxaDoDia(par, dia))?.taxa ?? null;
+}
 export async function taxaMxnAte(quando: Date): Promise<number | null> {
   const dia = diaBrasilia(quando);
   const ate = await taxaDoDia("MXNBRL", dia);
@@ -206,7 +223,7 @@ export function lerCsvConciliacaoZenith(csv: string): VendaZenithBruta[] {
     const quando = dataBrt(col(r, "data_hora_brt"));
     const bruto = num(col(r, "valor_bruto")) ?? 0;
     const liquido = num(col(r, "valor_liquido")); const reserva = num(col(r, "retencao"));
-    const moeda = col(r, "moeda").toUpperCase() === "BRL" ? "BRL" : "MXN";
+    const moeda = normalizarMoeda(col(r, "moeda")) ?? "MXN"; // CSV nativo antigo (sem coluna de moeda) era sempre MX$
     out.push({
       id, status, criadaEm: quando, aprovadaEm: status === "pendente" ? null : quando, moeda, bruto, liquido, reserva,
       produto: null, ids: [col(r, "referencia")].filter(Boolean),
@@ -248,7 +265,7 @@ export function dividirCsv(texto: string): string[][] {
  * (valor "MX$ 149,00"; status "Aprovada"/"Pendente"), sem data/hora nem taxas, limitado às 200 vendas mais recentes.
  * Serve só para CONCILIAR status pela referência (não cria venda: sem data não há como lançar receita).
  */
-export type LinhaExportZenith = { referencia: string; status: VendaZenithBruta["status"]; valor: number | null; moeda: "MXN" | "BRL"; metodo: string; cliente: string; pais: string };
+export type LinhaExportZenith = { referencia: string; status: VendaZenithBruta["status"]; valor: number | null; moeda: string; metodo: string; cliente: string; pais: string };
 
 export function ehCsvExportZenith(csv: string): boolean {
   const cab = (dividirCsv(csv)[0] ?? []).map((h) => h.trim().toLowerCase());
@@ -266,7 +283,7 @@ export function lerCsvExportZenith(csv: string): LinhaExportZenith[] {
   for (const r of linhas.slice(1)) {
     const referencia = col(r, "referencia"); if (!referencia) continue;
     const valorTxt = col(r, "valor");
-    out.push({ referencia, status: st(col(r, "status")), valor: num(valorTxt), moeda: col(r, "moeda").toUpperCase() === "BRL" || /^R\$/.test(valorTxt) ? "BRL" : "MXN", metodo: col(r, "metodo"), cliente: col(r, "cliente"), pais: col(r, "pais") });
+    out.push({ referencia, status: st(col(r, "status")), valor: num(valorTxt), moeda: normalizarMoeda(col(r, "moeda")) ?? (/^R\$/.test(valorTxt) ? "BRL" : "MXN"), metodo: col(r, "metodo"), cliente: col(r, "cliente"), pais: col(r, "pais") });
   }
   return out;
 }
@@ -328,7 +345,7 @@ export function lerCsvZenith(csv: string): VendaZenithBruta[] {
       criadaEm: col(r, "data", "criado_em", "created_at"),
       aprovadaEm: col(r, "aprovado_em", "aprovada_em", "data_aprovacao", "approved_at") ?? (status === "aprovada" ? col(r, "data", "criado_em") : null),
       reembolsadaEm: col(r, "reembolsado_em", "refunded_at", "data_reembolso"),
-      moeda: ((col(r, "moeda", "currency") ?? "MXN").toUpperCase() === "BRL" ? "BRL" : "MXN"),
+      moeda: normalizarMoeda(col(r, "moeda", "currency")) ?? "MXN",
       bruto: num(col(r, "bruto", "valor", "amount", "valor_bruto")) ?? 0,
       brlEstimado: num(col(r, "brl_estimado", "valor_brl", "brl")),
       liquido: num(col(r, "liquido", "líquido", "net", "valor_liquido")),

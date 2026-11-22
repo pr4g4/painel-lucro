@@ -56,7 +56,8 @@ export async function POST(req: NextRequest) {
     resultado = r.resultado; vendaIdOrigem = r.vendaIdOrigem;
   } catch (e) {
     resultado = `erro: ${e instanceof Error ? e.message : String(e)}`;
-    await abrirAviso("coleta_falhou", "zenith", `Webhook da Zenith (evento ${eventoId}) falhou ao aplicar: ${resultado}. Será reprocessado automaticamente na próxima coleta de câmbio.`);
+    if (/sem câmbio/.test(resultado)) await abrirAviso("sem_cambio", "zenith", `Venda da Zenith sem taxa de câmbio (evento ${eventoId}): ${resultado.replace(/^erro: /, "")}. Fica fora da receita até a taxa chegar; a próxima coleta de câmbio (10 min) tenta de novo.`);
+    else await abrirAviso("coleta_falhou", "zenith", `Webhook da Zenith (evento ${eventoId}) falhou ao aplicar: ${resultado}. Será reprocessado automaticamente na próxima coleta de câmbio.`);
   }
   await executar((d) => d.update(schema.zenithEventos).set({ processado: !resultado.startsWith("erro"), resultado, vendaIdOrigem }).where(eq(schema.zenithEventos.id, linhaId)));
   await executar((d) => d.insert(schema.coletas).values({ fonte: "zenith", terminadaEm: new Date(), ok: !resultado.startsWith("erro"), registros: 1, detalhe: { eventoId, resultado } }));

@@ -42,7 +42,6 @@ export function SeletorCompacto(props: { atalho: Atalho; deLocal: string; ateLoc
           </form>
           <div className="h-px bg-border my-1" />
           <label className="pop-linha">Fuso<select value={props.tz} onChange={(e) => ir(queryDe({ tz: e.target.value }, base))}><option value="America/Sao_Paulo">Brasília</option><option value="America/Mexico_City">México</option></select></label>
-          <label className="pop-linha">Moeda<select value={props.moeda} onChange={(e) => ir(queryDe({ moeda: e.target.value as "BRL" | "MXN" }, base))}><option value="BRL">R$ BRL</option><option value="MXN">MX$ MXN</option></select></label>
           <label className="pop-linha"><span>Incluir histórico</span><input type="checkbox" checked={props.incluirHistorico} onChange={(e) => ir(queryDe({ incluirHistorico: e.target.checked }, base))} /></label>
           <label className="pop-linha"><span>Incluir lançamentos manuais</span><input type="checkbox" checked={props.incluirManuais} onChange={(e) => ir(queryDe({ incluirManuais: e.target.checked }, base))} /></label>
         </div>

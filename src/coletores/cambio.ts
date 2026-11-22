@@ -19,13 +19,49 @@ export interface CambioCliente {
   ecbMxn(deDia: string, ateDia: string): Promise<Cruzada[]>;
   /** ECB (Frankfurter): USD→BRL por dia — reserva quando o PTAX falha (ex.: HTTP 403). Opcional. */
   ecbUsd?(deDia: string, ateDia: string): Promise<CotacaoDia[]>;
+  /** MOEDA→BRL por dia para QUALQUER moeda (ARS, COP, CLP, PEN…): PTAX do BCB quando publicar a moeda; senão fonte alternativa (estimada). */
+  moedaBrl?(moeda: string, deDia: string, ateDia: string): Promise<{ cotacoes: CotacaoDia[]; fonte: string; estimada: boolean }>;
 }
 
 const PTAX = "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata";
 const FRANKFURTER = "https://api.frankfurter.dev/v1"; // api.frankfurter.app passou a redirecionar (302) para cá
 const fmtPtax = (d: string) => { const [a, m, dd] = d.split("-"); return `${m}-${dd}-${a}`; };
 
+/** Fonte alternativa gratuita, sem chave, com histórico por data (fawazahmed0/currency-api, via jsDelivr; espelho em pages.dev). */
+async function currencyApiDia(moeda: string, dia: string): Promise<number | null> {
+  const m = moeda.toLowerCase();
+  for (const url of [`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${dia}/v1/currencies/${m}.json`, `https://${dia}.currency-api.pages.dev/v1/currencies/${m}.json`]) {
+    try {
+      const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8_000) });
+      if (!r.ok) continue;
+      const j = (await r.json()) as Record<string, Record<string, number> | string>;
+      const v = (j[m] as Record<string, number> | undefined)?.brl;
+      if (typeof v === "number" && v > 0) return v;
+    } catch { /* tenta o espelho */ }
+  }
+  return null;
+}
+
 export const clienteReal: CambioCliente = {
+  async moedaBrl(moeda, deDia, ateDia) {
+    // 1) PTAX do BCB (cotação de venda em BRL), se o BCB publicar a moeda
+    try {
+      const url = `${PTAX}/CotacaoMoedaPeriodo(moeda=@moeda,dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)?@moeda='${moeda}'&@dataInicial='${fmtPtax(deDia)}'&@dataFinalCotacao='${fmtPtax(ateDia)}'&$format=json&$select=cotacaoVenda,dataHoraCotacao`;
+      const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
+      if (r.ok) {
+        const j = (await r.json()) as { value: { cotacaoVenda: number; dataHoraCotacao: string }[] };
+        const porDia = new Map<string, number>();
+        for (const v of j.value ?? []) if (v.cotacaoVenda > 0) porDia.set(v.dataHoraCotacao.slice(0, 10), v.cotacaoVenda);
+        if (porDia.size) return { cotacoes: [...porDia.entries()].map(([dia, taxa]) => ({ dia, taxa })).sort((a, b) => a.dia.localeCompare(b.dia)), fonte: "ptax_bcb", estimada: false };
+      }
+    } catch { /* cai na fonte alternativa */ }
+    // 2) fonte alternativa por dia (ESTIMADA): os últimos dias da janela, um pedido por dia
+    const cotacoes: CotacaoDia[] = [];
+    for (let d = new Date(`${deDia}T12:00:00Z`); d.toISOString().slice(0, 10) <= ateDia && cotacoes.length < 60; d = new Date(d.getTime() + 86_400_000)) {
+      const dia = d.toISOString().slice(0, 10); const t = await currencyApiDia(moeda, dia); if (t) cotacoes.push({ dia, taxa: t });
+    }
+    return { cotacoes, fonte: "currency_api", estimada: true };
+  },
   async ptaxUsd(deDia, ateDia) {
     const url = `${PTAX}/CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)?@dataInicial='${fmtPtax(deDia)}'&@dataFinalCotacao='${fmtPtax(ateDia)}'&$format=json&$select=cotacaoVenda,dataHoraCotacao`;
     const r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(20_000) });
@@ -112,6 +148,9 @@ export async function coletarCambio(cliente: CambioCliente = clienteReal, agora 
     }
     detalhe.MXNBRL = mxnInfo;
 
+    // 2b) outras moedas das vendas (ARS, COP, CLP, PEN…): as que já aparecem em `vendas` mais ARS e COP
+    try { detalhe.outrasMoedas = await coletarOutrasMoedas(cliente, agora); } catch (e) { detalhe.outrasMoedas = { erro: e instanceof Error ? e.message : String(e) }; }
+
     // 3) Vendas da Zenith que falharam por falta de câmbio entram agora
     try {
       const { reprocessarEventosZenith } = await import("./zenith-aplicar");
@@ -123,8 +162,43 @@ export async function coletarCambio(cliente: CambioCliente = clienteReal, agora 
   });
 }
 
+const MOEDAS_BASE = ["ARS", "COP"];
+/** Coleta MOEDA→BRL de todas as moedas de venda diferentes de BRL/MXN/USD. Janela de 15 dias (45 se a moeda ainda não tem taxa). */
+export async function coletarOutrasMoedas(cliente: CambioCliente, agora = new Date()) {
+  const out: Record<string, unknown> = {};
+  if (!cliente.moedaBrl) return out;
+  const rows = await db.execute(sql`select distinct moeda from vendas where moeda not in ('BRL','MXN','USD')`) as unknown as { moeda: string }[];
+  const moedas = [...new Set([...MOEDAS_BASE, ...rows.map((r) => r.moeda)])];
+  for (const m of moedas) out[m] = await coletarMoeda(cliente, m, agora);
+  return out;
+}
+async function coletarMoeda(cliente: CambioCliente, moeda: string, agora: Date, dias?: number) {
+  const par = `${moeda}BRL`; const hoje = diaBrasilia(agora);
+  const [existe] = await db.select({ dia: schema.cambio.dia }).from(schema.cambio).where(eq(schema.cambio.par, par)).limit(1);
+  const janela = dias ?? (existe ? 15 : 45);
+  try {
+    const r = await cliente.moedaBrl!(moeda, diaBrasilia(new Date(agora.getTime() - janela * 86_400_000)), hoje);
+    for (const c of r.cotacoes) await gravar(c.dia, par, c.taxa, r.fonte, r.estimada);
+    // hoje ainda sem cotação (fim de semana, BCB só publica à tarde): repete a última como provisória
+    if (r.cotacoes.length && !r.cotacoes.some((c) => c.dia === hoje)) {
+      const [jaHoje] = await db.select().from(schema.cambio).where(and(eq(schema.cambio.dia, hoje), eq(schema.cambio.par, par))).limit(1);
+      if (!jaHoje) await gravar(hoje, par, r.cotacoes[r.cotacoes.length - 1].taxa, r.fonte, true);
+    }
+    return { recebidas: r.cotacoes.length, fonte: r.fonte, estimada: r.estimada };
+  } catch (e) { return { erro: e instanceof Error ? e.message : String(e) }; }
+}
+
+let clientePadrao: CambioCliente = clienteReal;
+/** Para testes: troca o cliente usado por `garantirTaxaMoeda`. */
+export function definirClienteCambio(c: CambioCliente) { clientePadrao = c; }
+/** Chamado quando chega uma venda numa moeda sem taxa gravada: tenta buscar na hora (45 dias). Nunca lança. */
+export async function garantirTaxaMoeda(moeda: string, _dia: string) {
+  if (!clientePadrao.moedaBrl) return;
+  try { await coletarMoeda(clientePadrao, moeda, new Date(), 45); } catch { /* a coleta de câmbio tenta de novo em 10 min */ }
+}
+
 /** Rótulo da fonte da taxa, para a tela. */
-export const ROTULO_FONTE_CAMBIO: Record<string, string> = { ptax: "PTAX", ecb_usd: "ECB USD (PTAX indisponível)", ptax_usd_x_ecb: "PTAX USD × ECB MXN", ecb_direto: "ECB (MXN→BRL direto)", zenith: "Zenith", manual: "manual" };
+export const ROTULO_FONTE_CAMBIO: Record<string, string> = { ptax: "PTAX", ecb_usd: "ECB USD (PTAX indisponível)", ptax_usd_x_ecb: "PTAX USD × ECB MXN", ecb_direto: "ECB (MXN→BRL direto)", ptax_bcb: "PTAX (BCB)", currency_api: "estimada (currency-api)", zenith: "Zenith", manual: "manual" };
 
 /** Última taxa MXN gravada: dia e fonte (para o selo do painel). */
 export async function ultimaTaxaMxnInfo(): Promise<{ dia: string; fonte: string; taxa: number } | null> {

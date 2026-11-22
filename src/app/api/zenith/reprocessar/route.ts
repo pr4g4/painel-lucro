@@ -17,9 +17,11 @@ export async function GET(req: NextRequest) {
   if (!segredoOk && s.papel !== "edita") return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
   const cambio = req.nextUrl.searchParams.get("cambio") === "1" ? await coletarCambio() : null;
   const r = await reprocessarEventosZenith();
+  const moedas = req.nextUrl.searchParams.get("moedas") === "1" ? await (await import("@/coletores/zenith-aplicar")).corrigirMoedasVendas() : null;
+  if (moedas) await (await import("@/lib/resumos")).recalcularResumos().catch(() => null);
   const dedup = req.nextUrl.searchParams.get("dedup");
   const desde = new Date(req.nextUrl.searchParams.get("desde") ?? "2026-10-03T03:00:00Z");
   const duplicadas = dedup ? await varrerDuplicadas(desde, dedup === "aplicar") : null;
   invalidarDados();
-  return NextResponse.json({ cambioColetado: cambio, taxas: await resumoCambio(), reprocessamento: r, duplicadas: duplicadas ? { modo: dedup === "aplicar" ? "anuladas" : "só listadas (use dedup=aplicar para anular)", quantidade: duplicadas.pares.length, pares: duplicadas.pares } : undefined });
+  return NextResponse.json({ cambioColetado: cambio, taxas: await resumoCambio(), reprocessamento: r, moedas, duplicadas: duplicadas ? { modo: dedup === "aplicar" ? "anuladas" : "só listadas (use dedup=aplicar para anular)", quantidade: duplicadas.pares.length, pares: duplicadas.pares } : undefined });
 }

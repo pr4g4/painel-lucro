@@ -66,6 +66,7 @@ export async function reprocessarEventosZenith(limite = 200): Promise<{ tentados
   }
   if (ok > 0) {
     await resolverAvisos("zenith", "coleta_falhou");
+    if (ok === pendentes.length || !detalhes.some((x) => /sem câmbio/.test(x))) await resolverAvisos("zenith", "sem_cambio");
     await executar((d) => d.insert(schema.coletas).values({ fonte: "zenith", terminadaEm: new Date(), ok: true, registros: ok, detalhe: { reprocessados: ok } }));
   }
   return { tentados: pendentes.length, ok, aindaComErro: pendentes.length - ok, detalhes };
@@ -109,4 +110,46 @@ export async function criarVendaDoEvento(eventoId: string): Promise<{ ok: boolea
   await executar((d) => d.insert(schema.vendas).values(nova));
   await executar((d) => d.update(schema.zenithEventos).set({ processado: true, resultado: `${e.resultado ?? ""} | venda ${r.identidade} criada manualmente`.replace(/^ \| /, ""), vendaIdOrigem: r.identidade }).where(eq(schema.zenithEventos.id, e.id)));
   return { ok: true, resultado: `venda ${r.identidade} criada: ${nova.status} ${nova.moeda} ${nova.brutoOriginal}` };
+}
+
+/**
+ * Corrige UMA vez as vendas gravadas com moeda diferente da do evento (22/11: ARS e COP gravadas como MXN inflaram o lucro).
+ * Refaz câmbio, deduções e reserva na moeda certa, mantendo status e datas. Sem taxa para a moeda: a venda sai da receita
+ * (historico = true, observação "aguardando câmbio") e abre o aviso sem_cambio; quando a taxa chega, a próxima coleta termina o trabalho.
+ * Idempotente: depois de corrigida, a venda não aparece mais na seleção.
+ */
+export async function corrigirMoedasVendas(): Promise<{ corrigidas: string[]; aguardandoCambio: string[] }> {
+  const { normalizarMoeda } = await import("@/lib/moedas");
+  const rows = await executar((d) => d.execute(sql`select id from vendas where fonte = 'zenith' and (
+      (nullif(upper(payload->'data'->>'currency'), '') is not null and upper(payload->'data'->>'currency') <> moeda)
+      or observacao like 'aguardando câmbio%')`), 15000, "vendas com moeda errada") as unknown as { id: number }[];
+  const corrigidas: string[] = [], aguardando: string[] = [];
+  for (const { id } of rows) {
+    const [v] = await executar((d) => d.select().from(schema.vendas).where(eq(schema.vendas.id, id)).limit(1), 10000, "venda");
+    if (!v) continue;
+    const pl = (v.payload ?? {}) as { data?: Record<string, unknown>; ids?: string[] };
+    const moeda = normalizarMoeda(pl.data?.currency);
+    if (!moeda) continue;
+    const { numeroDeduzido } = await import("./zenith-webhook");
+    try {
+      const nova = await normalizarVenda({
+        id: v.idOrigem, status: v.status, criadaEm: v.criadaEm, aprovadaEm: v.aprovadaEm, reembolsadaEm: v.reembolsadaEm, reservaLiberadaEm: v.reservaLiberadaEm,
+        moeda, bruto: Number(v.brutoOriginal), produto: v.produto, ids: pl.ids, deducoesTotais: pl.data ? numeroDeduzido(pl.data) : null, payload: v.payload,
+      }, "zenith");
+      await executar((d) => d.update(schema.vendas).set({
+        moeda: nova.moeda, taxaCambio: nova.taxaCambio, brutoBrl: nova.brutoBrl, taxaPctBrl: nova.taxaPctBrl, taxaFixaBrl: nova.taxaFixaBrl, cambioPctBrl: nova.cambioPctBrl,
+        liquidoBrl: nova.liquidoBrl, reservaBrl: nova.reservaBrl, historico: nova.historico, payload: nova.payload,
+        observacao: `moeda corrigida de ${v.moeda} para ${moeda} em ${new Date().toISOString()} (a venda tinha sido gravada com a moeda errada)`, coletadoEm: new Date(),
+      }).where(eq(schema.vendas.id, v.id)));
+      corrigidas.push(`${v.idOrigem}: ${v.moeda} → ${moeda} (R$ ${Number(v.brutoBrl).toFixed(2)} → R$ ${Number(nova.brutoBrl).toFixed(2)})`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/sem câmbio/.test(msg)) throw e;
+      await executar((d) => d.update(schema.vendas).set({ moeda, historico: true, observacao: `aguardando câmbio ${moeda}→BRL: fora da receita até a taxa chegar`, coletadoEm: new Date() }).where(eq(schema.vendas.id, v.id)));
+      aguardando.push(`${v.idOrigem}: ${moeda}`);
+    }
+  }
+  if (aguardando.length) await abrirAviso("sem_cambio", "zenith", `${aguardando.length} venda(s) da Zenith em moeda sem taxa de câmbio (${[...new Set(aguardando.map((x) => x.split(": ")[1]))].join(", ")}): fora da receita até a taxa chegar. A coleta de câmbio tenta a cada 10 min.`);
+  else if (rows.length) await resolverAvisos("zenith", "sem_cambio");
+  return { corrigidas, aguardandoCambio: aguardando };
 }

@@ -74,7 +74,7 @@ export async function upsertVendas(rows: NovaVenda[]): Promise<number> {
 }
 
 /** Taxa de câmbio do dia (ou a última anterior); null se não houver nenhuma. */
-export async function taxaDoDia(par: "USDBRL" | "MXNBRL", dia: string): Promise<{ taxa: number; provisoria: boolean } | null> {
+export async function taxaDoDia(par: string, dia: string): Promise<{ taxa: number; provisoria: boolean } | null> {
   // memória de 10 min por (par, dia): a coleta pedia a mesma taxa uma vez por lançamento (15 mil selects em 2 dias); a coleta de câmbio esquece ao gravar
   const { lembrar } = await import("@/lib/memoria");
   return lembrar(`cambio:${par}:${dia}`, async () => {

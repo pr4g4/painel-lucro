@@ -12,6 +12,7 @@
  */
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { VendaZenithBruta } from "./zenith";
+import { normalizarMoeda } from "@/lib/moedas";
 
 export const IDADE_MAXIMA_S = 300;
 
@@ -112,7 +113,9 @@ export function interpretarEvento(ev: EventoZenith, tipoHeader: string | null, t
   const amount = typeof amountRaw === "number" ? amountRaw : typeof amountRaw === "string" ? Number(amountRaw) : NaN;
   const ehReembolso = tipo === "payment.refunded" || tipo === "payment.chargeback";
   if (!Number.isFinite(amount) && !ehReembolso) return { ok: false, motivo: "campo amount ausente ou inválido", desconhecido: true };
-  const moeda = String(g(d, "currency") ?? "MXN").toUpperCase() === "BRL" ? "BRL" : "MXN";
+  // moeda = a do evento (ARS, COP, MXN…). Sem moeda válida o evento não vira venda: nunca se assume MXN (22/11: ARS 6.900 virou R$ 2.131).
+  const moeda = normalizarMoeda(g(d, "currency", "currencyCode", "moeda"));
+  if (!moeda && !ehReembolso) return { ok: false, motivo: "moeda ausente ou inválida no evento (data.currency)", desconhecido: true };
   const quando = tsParaDate(g(d, "createdAt", "created_at", "capturedAt", "creditedAt", "paidAt", "occurredAt") as string | number | undefined)
     ?? tsParaDate(timestampHeader ?? undefined) ?? new Date();
   const bruto = Number.isFinite(amount) ? amount / 100 : 0; // centavos → unidades
@@ -125,13 +128,21 @@ export function interpretarEvento(ev: EventoZenith, tipoHeader: string | null, t
   const metodo = String(g(d, "paymentMethod", "method") ?? (tipo === "deposit.credited" ? "spei" : ""));
   const familia = tipo === "deposit.credited" ? "deposito" : "pagamento";
   const pagador = pagadorDe(d);
-  const base = { id: identidade, moeda: moeda as "MXN" | "BRL", bruto, produto, ids: candidatos, payload: { eventoId: eventId, tipo, familia, metodo, pagador, data: d } };
+  const ded = numeroDeduzido(d);
+  const base = { id: identidade, moeda: (moeda ?? "MXN"), bruto, produto, ids: candidatos, deducoesTotais: ded, payload: { eventoId: eventId, tipo, familia, metodo, pagador, data: d } };
   if ((TIPOS_APROVACAO as readonly string[]).includes(tipo)) {
     return { ok: true, identidade, descricao: `${tipo}${metodo ? ` (${metodo})` : ""}`, venda: { ...base, status: "aprovada", criadaEm: quando, aprovadaEm: quando } };
   }
   if (tipo === "payment.pending") return { ok: true, identidade, descricao: tipo, venda: { ...base, status: "pendente", criadaEm: quando, aprovadaEm: null } };
   const quandoReembolso = tsParaDate(g(d, "refundedAt", "refunded_at", "chargebackAt", "occurredAt") as string | number | undefined) ?? quando;
   return { ok: true, identidade, descricao: tipo, venda: { ...base, status: tipo === "payment.chargeback" ? "chargeback" : "reembolsada", criadaEm: null, aprovadaEm: null, reembolsadaEm: quandoReembolso } };
+}
+
+/** Deduções totais informadas pela Zenith no evento (centavos → unidades da moeda da venda), se vierem num campo reconhecido. */
+export function numeroDeduzido(d: Record<string, unknown>): number | null {
+  const v = g(d, "deducoes_totais", "deducoesTotais", "totalDeductions", "total_deductions", "feesTotal", "totalFees");
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v) : NaN;
+  return Number.isFinite(n) && n > 0 ? n / 100 : null;
 }
 
 /** Quem pagou, se o payload disser (nome ou e-mail do pagador/cliente), normalizado para comparação; null se não houver. */

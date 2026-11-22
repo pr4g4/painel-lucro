@@ -29,6 +29,7 @@ export type ResumoInicial = {
   periodo: { inicio: string; fim: string }; anterior: { inicio: string; fim: string };
   totais: Totais; totaisAnterior: Totais; temBaseAnterior: boolean; avisosCalculo: string[];
   funil: Funil; funilAnterior: Funil;
+  vendasPorMoeda: { moeda: string; aprovadas: number; geradas: number }[]; // por moeda da venda (país), no período
   acum: { gran: "hora" | "dia"; pontos: { rotulo: string; valor: number; acumulado: number }[] };
   hoje: Totais;
   taxaMxn: number | null;
@@ -58,6 +59,7 @@ export function montarResumo(entrada: Entrada, estado: EstadoPeriodo, extras: Ex
     totais: atual.totais, totaisAnterior: anterior.totais, temBaseAnterior, avisosCalculo: atual.avisos,
     funil: funilDoPeriodo(entrada, estado.periodo, op.incluirHistorico), funilAnterior: funilDoPeriodo(entrada, estado.anterior, op.incluirHistorico),
     acum: { gran: acum.gran, pontos: acum.pontos.map((p) => ({ rotulo: p.rotulo, valor: p.valor, acumulado: p.acumulado })) },
+    vendasPorMoeda: vendasPorMoeda(entrada, estado.periodo, op.incluirHistorico),
     hoje: hoje.totais, taxaMxn: entrada.opcoes.cambio("MXNBRL", estado.agora),
     coletas, avisosTipos: extras.avisosTipos,
     kieUso7dUsd: entrada.lancamentos.filter((l) => l.fonte === "kie" && l.tipo === "uso_ia" && l.instante.getTime() >= estado.agora.getTime() - 7 * 86_400_000).reduce((s, l) => s + l.valorOriginal, 0),
@@ -155,3 +157,17 @@ export async function resumoDaInicial(sp: Params): Promise<{ r: ResumoInicial; e
 }
 export function propsSeletorDe(estado: EstadoPeriodo, podeSalvar: boolean) { return propsSeletor(estado, podeSalvar); }
 export { inArray, db };
+
+/** Vendas do período por moeda (país): aprovadas no período e geradas (criadas no período, qualquer status). Duplicadas anuladas já saem na leitura. */
+export function vendasPorMoeda(e: Entrada, p: Periodo, incluirHistorico: boolean): { moeda: string; aprovadas: number; geradas: number }[] {
+  const dentro = (d: Date | null) => !!d && d >= p.inicio && d < p.fim;
+  const m = new Map<string, { aprovadas: number; geradas: number }>();
+  for (const v of e.vendas) {
+    if (!incluirHistorico && v.historico) continue;
+    const q = v.quantidade ?? 1; const x = m.get(v.moeda) ?? { aprovadas: 0, geradas: 0 };
+    if (dentro(v.criadaEm)) x.geradas += q;
+    if (dentro(v.aprovadaEm) && v.status !== "pendente" && v.status !== "cancelada") x.aprovadas += q;
+    if (x.aprovadas || x.geradas) m.set(v.moeda, x);
+  }
+  return [...m.entries()].map(([moeda, x]) => ({ moeda, ...x })).sort((a, b) => b.aprovadas - a.aprovadas || b.geradas - a.geradas);
+}

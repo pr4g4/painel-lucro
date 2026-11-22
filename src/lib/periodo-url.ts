@@ -31,7 +31,7 @@ export function lerPeriodo(sp: Params, marcoZero: Date, agora = new Date()): Est
   const granManual = granParam === "hora" || granParam === "dia";
   return {
     atalho, periodo: r.periodo, anterior: periodoAnterior(r.periodo, tz), tz, incluirHistorico,
-    incluirManuais: um(sp.man) !== "0", moeda: um(sp.moeda) === "MXN" ? "MXN" : "BRL",
+    incluirManuais: um(sp.man) !== "0", moeda: "BRL", // 22/11: a inicial é sempre em R$ (vendas em vários países já vêm convertidas)
     gran: granManual ? (granParam as Granularidade) : granularidadeAutomatica(r.periodo), granManual, agora, marcoZero,
   };
 }

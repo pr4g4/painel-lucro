@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { formatInTimeZone } from "date-fns-tz";
 import { alertaSaldo } from "@/lib/calculo";
 import { fontesAtrasadas } from "@/lib/hoje";
+import { paisDaMoeda } from "@/lib/moedas";
 import { resumoDaInicial, propsSeletorDe } from "@/lib/resumos";
 import type { EstadoColeta } from "@/lib/dados";
 import { diaBrasilia } from "@/coletores/base";
@@ -30,7 +31,7 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
   const t = r.totais, a = r.totaisAnterior;
   const fu = r.funil, fa = r.funilAnterior;
   const money = (v: number | null | undefined) => fmtMoeda(v, estado.moeda, taxaMxn);
-  const prefixo = estado.moeda === "MXN" ? "MX$ " : "R$ ";
+  const prefixo = "R$ ";
   const emMoeda = (v: number) => (estado.moeda === "MXN" && taxaMxn ? v / taxaMxn : v);
   const query = new URLSearchParams(Object.entries(sp).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : []))).toString();
 
@@ -141,6 +142,12 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
             );
           })()}
         </section>
+
+        {r.vendasPorMoeda.length > 1 && (
+          <div className="paises-linha num" aria-label="Vendas por país no período" title="vendas aprovadas por país (moeda da venda); tudo convertido para R$">
+            <span className="text-ink-3">por país</span> {r.vendasPorMoeda.map((x) => <span key={x.moeda}><b>{paisDaMoeda(x.moeda)}</b> {x.aprovadas}{x.geradas > x.aprovadas ? <span className="text-ink-3"> ({x.geradas - x.aprovadas} pend.)</span> : null}</span>)}
+          </div>
+        )}
 
         <AreaAcumulado pontos={acum.pontos.map((p) => ({ rotulo: p.rotulo, acumulado: emMoeda(p.acumulado), valor: emMoeda(p.valor) }))} rotuloFim={rotuloFim} gran={acum.gran} moeda={estado.moeda} />
 
