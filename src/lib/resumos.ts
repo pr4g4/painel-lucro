@@ -31,6 +31,7 @@ export type ResumoInicial = {
   funil: Funil; funilAnterior: Funil;
   vendasPorMoeda: { moeda: string; aprovadas: number; geradas: number }[]; // por moeda da venda (país), no período
   acum: { gran: "hora" | "dia"; pontos: { rotulo: string; valor: number; acumulado: number }[] };
+  acumAnterior?: { rotulo: string; valor: number; acumulado: number }[]; // mesma curva do período anterior (hoje → ontem até a mesma hora), ponto a ponto
   hoje: Totais;
   taxaMxn: number | null;
   coletas: Record<string, ColetaS>;
@@ -50,6 +51,7 @@ export function montarResumo(entrada: Entrada, estado: EstadoPeriodo, extras: Ex
   const hoje = estado.atalho === "hoje" ? atual : calc(hojeP);
   const temBaseAnterior = anterior.totais.numVendas > 0 || anterior.totais.custosTotais > 0 || anterior.totais.pendentesQtd > 0 || temDados(entrada, estado.anterior, op.incluirHistorico);
   const acum = lucroAcumulado({ ...entrada, opcoes: { ...entrada.opcoes, ...op } }, estado.periodo, estado.tz);
+  const acumAnt = lucroAcumulado({ ...entrada, opcoes: { ...entrada.opcoes, ...op } }, estado.anterior, estado.tz);
   const coletas: Record<string, ColetaS> = {};
   for (const [f, c] of extras.coletas) coletas[f] = { ultimaOk: c.ultimaOk?.toISOString() ?? null, ultima: c.ultima.toISOString(), erro: c.erro, falhasSeguidas: c.falhasSeguidas, naoConfigurada: c.naoConfigurada };
   const cr = extras.creditos;
@@ -60,6 +62,7 @@ export function montarResumo(entrada: Entrada, estado: EstadoPeriodo, extras: Ex
     funil: funilDoPeriodo(entrada, estado.periodo, op.incluirHistorico), funilAnterior: funilDoPeriodo(entrada, estado.anterior, op.incluirHistorico),
     acum: { gran: acum.gran, pontos: acum.pontos.map((p) => ({ rotulo: p.rotulo, valor: p.valor, acumulado: p.acumulado })) },
     vendasPorMoeda: vendasPorMoeda(entrada, estado.periodo, op.incluirHistorico),
+    acumAnterior: acumAnt.pontos.map((p) => ({ rotulo: p.rotulo, valor: p.valor, acumulado: p.acumulado })),
     hoje: hoje.totais, taxaMxn: entrada.opcoes.cambio("MXNBRL", estado.agora),
     coletas, avisosTipos: extras.avisosTipos,
     kieUso7dUsd: entrada.lancamentos.filter((l) => l.fonte === "kie" && l.tipo === "uso_ia" && l.instante.getTime() >= estado.agora.getTime() - 7 * 86_400_000).reduce((s, l) => s + l.valorOriginal, 0),

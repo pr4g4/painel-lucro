@@ -77,7 +77,6 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
             <NumeroAnimado chave="lucro" valor={emMoeda(t.lucroLiquido)} texto={money(t.lucroLiquido)} prefixo={prefixo} />
           </div>
           <div className="hero-sub num">
-            <span>metade p/ sócio <b className="text-ink">{money(t.porSocio)}</b></span>
             {varLucro.texto && <span className={varLucro.bom == null ? "" : varLucro.bom ? "pos" : "neg"}>{varLucro.texto}</span>}
           </div>
         </section>
@@ -149,7 +148,10 @@ export default async function Inicio({ searchParams }: { searchParams: Promise<P
           </div>
         )}
 
-        <AreaAcumulado pontos={acum.pontos.map((p) => ({ rotulo: p.rotulo, acumulado: emMoeda(p.acumulado), valor: emMoeda(p.valor) }))} rotuloFim={rotuloFim} gran={acum.gran} moeda={estado.moeda} />
+        <AreaAcumulado pontos={acum.pontos.map((p) => ({ rotulo: p.rotulo, acumulado: emMoeda(p.acumulado), valor: emMoeda(p.valor) }))}
+          anterior={(r.acumAnterior ?? []).map((p) => ({ rotulo: p.rotulo, acumulado: emMoeda(p.acumulado), valor: emMoeda(p.valor) }))}
+          rotuloAnterior={estado.atalho === "hoje" ? "ontem" : estado.atalho === "ontem" ? "anteontem" : "período anterior"}
+          rotuloFim={rotuloFim} gran={acum.gran} moeda={estado.moeda} />
 
         {/* selos (pedido 5): kie.ai só se teve consumo nos últimos 7 dias; OpenAI mostra o gasto do período em R$ */}
         <div className="saldos-linha num">
